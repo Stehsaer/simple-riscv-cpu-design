@@ -1428,7 +1428,7 @@ module Inst_cache_w32_addr32 (
 
     input wire m_axi_rvalid,
     output wire m_axi_rready,
-    input wire [31:0] m_axi_rdata,
+    input wire [127:0] m_axi_rdata,
     input wire m_axi_rlast,
     input wire [0:0] m_axi_rid,
     input wire [1:0] m_axi_rresp
@@ -1465,15 +1465,6 @@ module Inst_cache_w32_addr32 (
     // -- [79:60]: Tag from set 3
     // -- [83:80]: Unused
     // -- [99:84]: LRU Matrix for 4 sets
-
-    /* AXI FIXED VALUE */
-
-    assign m_axi_arcache = 4'b1111;
-    assign m_axi_arlen   = 31;
-    assign m_axi_arburst = 2'b01;
-    assign m_axi_arsize  = 3'b010;
-    assign m_axi_arid    = 0;
-    assign m_axi_arlock  = 1'b0;
 
     /* PIPELINE SIGNALS */
 
@@ -1535,7 +1526,7 @@ module Inst_cache_w32_addr32 (
     wire [127:0] data_storage_wdata;
     wire [127:0] data_storage_rdata;
     wire data_storage_wen, data_storage_ren;
-    reg [15:0] data_storage_wmask;
+    wire [15:0] data_storage_wmask;
 
     bram_w128_d1024_sdp data_storage (
         .clka (clk),                 // input wire clka
@@ -1669,7 +1660,7 @@ module Inst_cache_w32_addr32 (
     // State
 
     reg [2:0] process_state;
-    reg [4:0] process_readin_counter;
+    reg [2:0] process_readin_counter;
 
     localparam STATE_NORMAL = 0;
 
@@ -1697,20 +1688,22 @@ module Inst_cache_w32_addr32 (
     // -- Replace: Writes block to data storage, updates valid tag
 
     assign data_storage_wen = process_state == STATE_REPLACE_READIN_RECEIVE_DATA && m_axi_rvalid;
-    assign data_storage_wdata = {m_axi_rdata, m_axi_rdata, m_axi_rdata, m_axi_rdata};
-    assign data_storage_waddr = {process_final_set, process_index, process_readin_counter[4:2]};
-
-    always @(*)
-        case (process_readin_counter[1:0])
-            0: data_storage_wmask = 16'h000F;
-            1: data_storage_wmask = 16'h00F0;
-            2: data_storage_wmask = 16'h0F00;
-            3: data_storage_wmask = 16'hF000;
-        endcase
+    assign data_storage_wdata = m_axi_rdata;
+    assign data_storage_waddr = {process_final_set, process_index, process_readin_counter};
+    assign data_storage_wmask = 16'hFFFF;
 
     assign valid_storage_waddr = process_index;
     assign valid_storage_wen   = process_state == STATE_REPLACE_READIN_FINALIZE;
     assign valid_storage_din   = valid_storage_dout | (4'b0001 << process_final_set);
+
+    /* AXI FIXED VALUE */
+
+    assign m_axi_arcache = 4'b1111;
+    assign m_axi_arlen   = 7;
+    assign m_axi_arburst = 2'b01;
+    assign m_axi_arsize  = 3'b100;
+    assign m_axi_arid    = 0;
+    assign m_axi_arlock  = 1'b0;
 
     assign m_axi_arvalid       = process_state == STATE_REPLACE_READIN_SEND_ADDRESS;
     assign m_axi_araddr        = {process_tag, process_index, 7'd0};
@@ -1744,7 +1737,7 @@ module Inst_cache_w32_addr32 (
 
                 STATE_REPLACE_READIN_RECEIVE_DATA: begin
                     if (m_axi_rvalid) begin
-                        if (process_readin_counter == 31)
+                        if (process_readin_counter == 7)
                             process_state <= STATE_REPLACE_READIN_FINALIZE;
                         else process_readin_counter <= process_readin_counter + 1;
                     end
