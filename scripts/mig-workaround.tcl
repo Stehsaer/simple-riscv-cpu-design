@@ -1,0 +1,1 @@
+remove_cell [get_cells "ddr_design_i/mig_7series_0/u_ddr_design_mig_7series_0_0_mig/u_iodelay_ctrl/u_idelayctrl_200"]
