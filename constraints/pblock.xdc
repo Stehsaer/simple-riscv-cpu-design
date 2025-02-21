@@ -27,14 +27,6 @@ resize_pblock [get_pblocks pblock_icache] -add {RAMB18_X3Y40:RAMB18_X3Y51}
 resize_pblock [get_pblocks pblock_icache] -add {RAMB36_X3Y20:RAMB36_X3Y25}
 set_property IS_SOFT FALSE [get_pblocks pblock_icache]
 
-create_pblock pblock_interconnect
-resize_pblock [get_pblocks pblock_interconnect] -add {SLICE_X36Y50:SLICE_X107Y99}
-resize_pblock [get_pblocks pblock_interconnect] -add {DSP48_X2Y20:DSP48_X6Y39}
-resize_pblock [get_pblocks pblock_interconnect] -add {RAMB18_X2Y20:RAMB18_X5Y39}
-resize_pblock [get_pblocks pblock_interconnect] -add {RAMB36_X2Y10:RAMB36_X5Y19}
-set_property IS_SOFT TRUE [get_pblocks pblock_interconnect]
-add_cells_to_pblock [get_pblocks pblock_interconnect] [get_cells -quiet [list ddr_design_i/axi_interconnect_0 ddr_design_i/axi_interconnect_1]]
-
 set_property PARENT pblock_core [get_pblocks pblock_dcache]
 set_property PARENT pblock_core [get_pblocks pblock_icache]
 

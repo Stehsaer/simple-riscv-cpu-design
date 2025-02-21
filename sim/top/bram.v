@@ -1,7 +1,6 @@
-`timescale 1ns / 1ns
+`timescale 1ns / 1ps
 
-module tb_cpu_bram;
-
+module tb_noddr;
 
     // Declare signals
     reg  clk_i;
@@ -10,39 +9,38 @@ module tb_cpu_bram;
     wire rx_i;
     wire tx_o;
 
-    cpu_top_bram_wrapper top (
-        .clk_pair_clk_p(clk_i),
-        .clk_pair_clk_n(~clk_i),
-        .rst_i(rst_i),
-        .tx_o(tx_o),
-        .rx_i(rx_i)
+    sim_bench top (
+        .clk(clk_i),
+        .rst(rst_i),
+        .tx(tx_o),
+        .rx(rx_i)
     );
 
     // Generate a 100MHz clock signal
     initial begin
         clk_i = 1;
-        forever #5 clk_i = ~clk_i;
+        forever #(3.571) clk_i = ~clk_i;
     end
 
     integer fd;
 
-    always @(posedge top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.clk_i) begin
-        if (top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.reg_file_wen && top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.reg_file_waddr != 0 ) begin
+    always @(posedge top.cpu.core_module.inst.u_cpu_core.clk_i) begin
+        if (top.cpu.core_module.inst.u_cpu_core.reg_file_wen && top.cpu.core_module.inst.u_cpu_core.reg_file_waddr != 0 ) begin
             $fdisplay(fd, "%08h, Reg, x%02d, %h",
-                      top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.mem1_mem2_pc4 - 4,
-                      top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.reg_file_waddr,
-                      top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.reg_file_wdata);
+                      top.cpu.core_module.inst.u_cpu_core.mem1_mem2_pc4 - 4,
+                      top.cpu.core_module.inst.u_cpu_core.reg_file_waddr,
+                      top.cpu.core_module.inst.u_cpu_core.reg_file_wdata);
         end
 
-        // if (top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.ex_mem1_accept_ready && top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.ex_product_ready) begin
+        // if (top.cpu.core_module.inst.u_cpu_core.ex_mem1_accept_ready && top.cpu.core_module.inst.u_cpu_core.ex_product_ready) begin
         //     $fdisplay(fd, "%08h, %08h",
-        //               top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.id_ex_pc,
-        //               top.cpu_top_bram_i.cpu.core_module.inst.u_cpu_core.id_ex_inst
+        //               top.cpu.core_module.inst.u_cpu_core.id_ex_pc,
+        //               top.cpu.core_module.inst.u_cpu_core.id_ex_inst
         //               );
         // end
 
-        if(top.cpu_top_bram_i.uart_axi_0.inst.tx_fifo.wr_en) begin
-            $write("%c", top.cpu_top_bram_i.uart_axi_0.inst.tx_fifo.din);
+        if(top.uart_axi_0.inst.tx_fifo.wr_en) begin
+            $write("%c", top.uart_axi_0.inst.tx_fifo.din);
         end
     end
 
@@ -52,7 +50,7 @@ module tb_cpu_bram;
     localparam parity = 3'b001;  // Odd
     localparam stopbits = 1'b0;  // 1 stop bit
     // 100MHz / 115200 = 868.0555555555556
-    localparam divisor = 8680;  // 115200 baud rate
+    localparam divisor = 1000;  // 115200 baud rate
 
     localparam STRLEN = 1148;
 

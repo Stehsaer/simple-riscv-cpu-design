@@ -1,5 +1,6 @@
 wave-cfg/*
 .vscode/*
 archive/*
+.VSCodeCounter/*
 
 constraints/debug-probe.xdc
