@@ -518,26 +518,44 @@ module cpu_core_v6 (
 
     assign flush = if_pc_wen;
 
-    assign bp_counter_wen = id_ex_valid && id_ex_pc_sel && id_ex_bp_enabled;
-    assign bp_target_wen = bp_counter_wen;
-    assign bp_history_wen = bp_counter_wen;
+    reg bp_wen;
+    reg bp_do_branch;
+    reg [31:0] bp_wb_pc, bp_add_result;
 
-    assign bp_history_waddr = id_ex_pc[9:2];
+    always @(posedge clk_i) begin
+        if (!rst_i) begin
+            bp_wen        <= 0;
+            bp_do_branch  <= 0;
+            bp_wb_pc      <= 0;
+            bp_add_result <= 0;
+        end else begin
+            bp_wen        <= id_ex_valid && id_ex_pc_sel && id_ex_bp_enabled;
+            bp_do_branch  <= ex_do_branch;
+            bp_wb_pc      <= id_ex_pc;
+            bp_add_result <= ex_alu_add_result;
+        end
+    end
+
+    assign bp_counter_wen   = bp_wen;
+    assign bp_target_wen    = bp_wen;
+    assign bp_history_wen   = bp_wen;
+
+    assign bp_history_waddr = bp_wb_pc[9:2];
     assign bp_counter_waddr = bp_history_rwdata;
-    assign bp_target_waddr = id_ex_pc[8:2];
+    assign bp_target_waddr  = bp_wb_pc[8:2];
 
-    assign bp_target_wdata = {id_ex_pc[31:2], ex_alu_add_result[31:1]};
+    assign bp_target_wdata  = {bp_wb_pc[31:2], bp_add_result[31:1]};
 
-    assign bp_history_wdata = {bp_history_rwdata[8:0], ex_do_branch};
+    assign bp_history_wdata = {bp_history_rwdata[8:0], bp_do_branch};
 
     always @(*) begin
         case (bp_counter_rwdata)
             BP_STRONG_NOT_TAKEN:
-            bp_counter_wdata = ex_do_branch ? BP_WEAK_NOT_TAKEN : BP_STRONG_NOT_TAKEN;
+            bp_counter_wdata = bp_do_branch ? BP_WEAK_NOT_TAKEN : BP_STRONG_NOT_TAKEN;
             BP_WEAK_NOT_TAKEN:
-            bp_counter_wdata = ex_do_branch ? BP_WEAK_TAKEN : BP_STRONG_NOT_TAKEN;
-            BP_WEAK_TAKEN: bp_counter_wdata = ex_do_branch ? BP_STRONG_TAKEN : BP_WEAK_NOT_TAKEN;
-            BP_STRONG_TAKEN: bp_counter_wdata = ex_do_branch ? BP_STRONG_TAKEN : BP_WEAK_TAKEN;
+            bp_counter_wdata = bp_do_branch ? BP_WEAK_TAKEN : BP_STRONG_NOT_TAKEN;
+            BP_WEAK_TAKEN: bp_counter_wdata = bp_do_branch ? BP_STRONG_TAKEN : BP_WEAK_NOT_TAKEN;
+            BP_STRONG_TAKEN: bp_counter_wdata = bp_do_branch ? BP_STRONG_TAKEN : BP_WEAK_TAKEN;
         endcase
     end
 
