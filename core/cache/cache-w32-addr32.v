@@ -203,7 +203,7 @@ module Data_cache_w32_addr32 (
     // [32] -> Word [0:3] of Set 0 Line 1
     // ...
     // [1023] -> Word [28:31] of Set 3 Line 31
-    
+
     /*===== TAG STORAGE BITS =====*/
     // -- [19:0]: Tag from set 0
     // -- [39:20]: Tag from set 1
@@ -311,17 +311,25 @@ module Data_cache_w32_addr32 (
     wire [101:0] tag_storage_rdata;
     reg tag_storage_wen, tag_storage_ren;
 
-    bram_w102_d32 tag_storage (
-        .clka (clk),                // input wire clka
-        .ena  (tag_storage_wen),    // input wire ena
-        .wea  (tag_storage_wen),    // input wire [0 : 0] wea
-        .addra(tag_storage_waddr),  // input wire [4 : 0] addra
-        .dina (tag_storage_wdata),  // input wire [101: 0] dina
-        .clkb (clk),                // input wire clkb
-        .enb  (tag_storage_ren),    // input wire enb
-        .addrb(tag_storage_raddr),  // input wire [4 : 0] addrb
-        .doutb(tag_storage_rdata)   // output wire [99 : 0] doutb
-    );
+    reg [101:0] tag_storage_lutram[0:31];
+    reg [101:0] tag_storage_dout;
+
+    integer tag_lutram_i;
+    always @(posedge clk) begin
+        if (!rstn) begin
+
+            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1)
+            tag_storage_lutram[tag_lutram_i] <= 102'b0;
+
+            tag_storage_dout <= 102'b0;
+
+        end else begin
+            if (tag_storage_wen) tag_storage_lutram[tag_storage_waddr] <= tag_storage_wdata;
+            if (tag_storage_ren) tag_storage_dout <= tag_storage_lutram[tag_storage_raddr];
+        end
+    end
+
+    assign tag_storage_rdata = tag_storage_dout;
 
     /* CHANNELS */
 
@@ -1030,7 +1038,7 @@ module Data_cache_w32_addr32 (
                 STATE_PERIPH_READ_RECEIVE_DATA: begin
                     if (m_axi_rvalid) begin
                         process_state <= STATE_PERIPH_READ_FINALIZE;
-                        
+
                         case (process_subline_offset)
                             0: periph_buffer <= m_axi_rdata[31:0];
                             1: periph_buffer <= m_axi_rdata[63:32];
@@ -1122,9 +1130,13 @@ module Data_cache_w32_addr32 (
         process_queried_tag_set0
     };
 
-    assign data_storage_waddr_channel_normal = {process_index, process_hit_set, process_subline_index};
+    assign data_storage_waddr_channel_normal = {
+        process_index, process_hit_set, process_subline_index
+    };
     assign data_storage_wen_channel_normal = process_cache_hit_not_periph && query_process_wreq;
-    assign data_storage_raddr_channel_normal = {process_index, process_hit_set, process_subline_index};
+    assign data_storage_raddr_channel_normal = {
+        process_index, process_hit_set, process_subline_index
+    };
     assign data_storage_ren_channel_normal = query_process_rreq && process_output_accept_ready && process_product_ready;
 
     assign data_storage_wdata_channel_normal = {4{query_process_wdata}};
@@ -1136,12 +1148,12 @@ module Data_cache_w32_addr32 (
             2: data_storage_wmask_channel_normal = {4'b0, query_process_wmask, 8'b0};
             3: data_storage_wmask_channel_normal = {query_process_wmask, 12'b0};
         endcase
-    
+
     assign awvalid_channel_normal = 1'b0;
     assign awaddr_channel_normal = 32'b0;
     assign awlen_channel_normal = 8'b0;
     assign awcache_channel_normal = 4'b0;
-    assign awsize_channel_normal = 2; // Left default at 32-bit
+    assign awsize_channel_normal = 2;  // Left default at 32-bit
 
     assign wvalid_channel_normal = 1'b0;
     assign wlast_channel_normal = 1'b0;
@@ -1154,7 +1166,7 @@ module Data_cache_w32_addr32 (
     assign araddr_channel_normal = 32'b0;
     assign arlen_channel_normal = 8'b0;
     assign arcache_channel_normal = 4'b0;
-    assign arsize_channel_normal = 2; // Left default at 32-bit
+    assign arsize_channel_normal = 2;  // Left default at 32-bit
 
     assign rready_channel_normal = 1'b0;
 
@@ -1224,24 +1236,24 @@ module Data_cache_w32_addr32 (
             3: awaddr_channel_replace = {process_queried_tag_set3, process_index, 7'b0};
         endcase
 
-    assign awlen_channel_replace   = 7; // 8 Sublines
-    assign awcache_channel_replace = 4'b1111;  // Cache-style
-    assign awsize_channel_replace  = 4; // 128-bit
+    assign awlen_channel_replace             = 7;  // 8 Sublines
+    assign awcache_channel_replace           = 4'b1111;  // Cache-style
+    assign awsize_channel_replace            = 4;  // 128-bit
 
-    assign wvalid_channel_replace  = process_state == STATE_REPLACE_WRITEBACK_SEND_DATA;
-    assign wlast_channel_replace   = replace_counter == 7;
-    assign wdata_channel_replace   = data_storage_rdata;
-    assign wstrb_channel_replace   = 16'hFFFF;
+    assign wvalid_channel_replace            = process_state == STATE_REPLACE_WRITEBACK_SEND_DATA;
+    assign wlast_channel_replace             = replace_counter == 7;
+    assign wdata_channel_replace             = data_storage_rdata;
+    assign wstrb_channel_replace             = 16'hFFFF;
 
-    assign bready_channel_replace  = 1'b1;
+    assign bready_channel_replace            = 1'b1;
 
-    assign arvalid_channel_replace = process_state == STATE_REPLACE_READIN_SEND_ADDRESS;
-    assign araddr_channel_replace  = {process_tag, process_index, 7'b0};
-    assign arlen_channel_replace   = 7;   // 8 Sublines
-    assign arcache_channel_replace = 4'b1111;  // Cache-style
-    assign arsize_channel_replace  = 4; // 128-bit
+    assign arvalid_channel_replace           = process_state == STATE_REPLACE_READIN_SEND_ADDRESS;
+    assign araddr_channel_replace            = {process_tag, process_index, 7'b0};
+    assign arlen_channel_replace             = 7;  // 8 Sublines
+    assign arcache_channel_replace           = 4'b1111;  // Cache-style
+    assign arsize_channel_replace            = 4;  // 128-bit
 
-    assign rready_channel_replace  = 1'b1;
+    assign rready_channel_replace            = 1'b1;
 
     // -- Peripheral channel
 
@@ -1263,13 +1275,13 @@ module Data_cache_w32_addr32 (
     assign awaddr_channel_periph             = query_process_addr;
     assign awlen_channel_periph              = 0;  // 1 word
     assign awcache_channel_periph            = 4'b0000;  // Cache
-    assign awsize_channel_periph              = 2; // 32-bit
+    assign awsize_channel_periph             = 2;  // 32-bit
 
     assign wvalid_channel_periph             = process_state == STATE_PERIPH_WRITE_SEND_DATA;
     assign wlast_channel_periph              = 1'b1;
     assign wdata_channel_periph              = {4{query_process_wdata}};
-    
-    always @(*) 
+
+    always @(*)
         case (process_subline_offset)
             0: wstrb_channel_periph = {12'b0, query_process_wmask};
             1: wstrb_channel_periph = {8'b0, query_process_wmask, 4'b0};
@@ -1277,21 +1289,21 @@ module Data_cache_w32_addr32 (
             3: wstrb_channel_periph = {query_process_wmask, 12'b0};
         endcase
 
-    assign bready_channel_periph             = 1'b1;
+    assign bready_channel_periph            = 1'b1;
 
-    assign arvalid_channel_periph            = process_state == STATE_PERIPH_READ_SEND_ADDRESS;
-    assign araddr_channel_periph             = query_process_addr;
-    assign arlen_channel_periph              = 0;  // 1 word
-    assign arcache_channel_periph            = 4'b0000;  // Peripheral
-    assign arsize_channel_periph             = 2; // 32-bit
+    assign arvalid_channel_periph           = process_state == STATE_PERIPH_READ_SEND_ADDRESS;
+    assign araddr_channel_periph            = query_process_addr;
+    assign arlen_channel_periph             = 0;  // 1 word
+    assign arcache_channel_periph           = 4'b0000;  // Peripheral
+    assign arsize_channel_periph            = 2;  // 32-bit
 
-    assign rready_channel_periph             = 1'b1;
+    assign rready_channel_periph            = 1'b1;
 
     // -- Flush channel
-    assign valid_storage_wen_channel_flush   = 0;
-    assign valid_storage_ren_channel_flush   = process_state == STATE_FLUSH_READ_TAG;
-    assign valid_storage_din_channel_flush   = 0;
-    assign valid_storage_addr_channel_flush  = flush_outer_counter[6:2];
+    assign valid_storage_wen_channel_flush  = 0;
+    assign valid_storage_ren_channel_flush  = process_state == STATE_FLUSH_READ_TAG;
+    assign valid_storage_din_channel_flush  = 0;
+    assign valid_storage_addr_channel_flush = flush_outer_counter[6:2];
 
     wire [2:0] flush_inner_counter_next = flush_inner_counter + 1;
 
@@ -1330,15 +1342,15 @@ module Data_cache_w32_addr32 (
         endcase
 
     assign awvalid_channel_flush = process_state == STATE_FLUSH_SEND_ADDRESS;
-    assign awaddr_channel_flush  = {flush_tag, flush_outer_counter[6:2], 7'b0};
-    assign awlen_channel_flush   = 7;  // 8 sublines
+    assign awaddr_channel_flush = {flush_tag, flush_outer_counter[6:2], 7'b0};
+    assign awlen_channel_flush = 7;  // 8 sublines
     assign awcache_channel_flush = 4'b1111;  // Cache-style
-    assign awsize_channel_flush  = 4; // 128-bit
+    assign awsize_channel_flush = 4;  // 128-bit
 
-    assign wvalid_channel_flush  = process_state == STATE_FLUSH_SEND_DATA;
-    assign wlast_channel_flush   = flush_inner_counter == 7;
-    assign wdata_channel_flush   = data_storage_rdata;
-    assign wstrb_channel_flush   = 16'hFFFF;
+    assign wvalid_channel_flush = process_state == STATE_FLUSH_SEND_DATA;
+    assign wlast_channel_flush = flush_inner_counter == 7;
+    assign wdata_channel_flush = data_storage_rdata;
+    assign wstrb_channel_flush = 16'hFFFF;
 
     assign bready_channel_flush = 1'b1;
 
@@ -1346,7 +1358,7 @@ module Data_cache_w32_addr32 (
     assign araddr_channel_flush = 0;
     assign arlen_channel_flush = 0;
     assign arcache_channel_flush = 0;
-    assign arsize_channel_flush = 2; // 32-bit at default
+    assign arsize_channel_flush = 2;  // 32-bit at default
 
     assign rready_channel_flush = 0;
 
@@ -1370,23 +1382,24 @@ module Data_cache_w32_addr32 (
     reg process_output_source;
     reg process_output_rreq;
 
-    assign rresp      = process_output_valid && process_output_rreq;
-    assign dout       = process_output_source ? process_output_periph_buffer : process_output_cache_data;
+    assign rresp = process_output_valid && process_output_rreq;
+    assign dout = process_output_source ? process_output_periph_buffer : process_output_cache_data;
     assign flush_done = process_state == STATE_FLUSH_FINALIZE;
 
-    always @(*) case (process_output_subline_index)
-        0: process_output_cache_data = data_storage_rdata[31:0];
-        1: process_output_cache_data = data_storage_rdata[63:32];
-        2: process_output_cache_data = data_storage_rdata[95:64];
-        3: process_output_cache_data = data_storage_rdata[127:96];
-    endcase
+    always @(*)
+        case (process_output_subline_index)
+            0: process_output_cache_data = data_storage_rdata[31:0];
+            1: process_output_cache_data = data_storage_rdata[63:32];
+            2: process_output_cache_data = data_storage_rdata[95:64];
+            3: process_output_cache_data = data_storage_rdata[127:96];
+        endcase
 
     always @(posedge clk) begin
         if (!rstn) begin
 
-            process_output_valid <= 0;
-            process_output_rreq  <= 0;
-            process_output_source <= 0;
+            process_output_valid         <= 0;
+            process_output_rreq          <= 0;
+            process_output_source        <= 0;
             process_output_periph_buffer <= 0;
             process_output_subline_index <= 0;
 
@@ -1561,17 +1574,25 @@ module Inst_cache_w32_addr32 (
     wire [99:0] tag_storage_rdata;
     wire tag_storage_wen, tag_storage_ren;
 
-    bram_w100_d32 tag_storage (
-        .clka (clk),                // input wire clka
-        .ena  (tag_storage_wen),    // input wire ena
-        .wea  (tag_storage_wen),    // input wire [0 : 0] wea
-        .addra(tag_storage_waddr),  // input wire [4 : 0] addra
-        .dina (tag_storage_wdata),  // input wire [99 : 0] dina
-        .clkb (clk),                // input wire clkb
-        .enb  (tag_storage_ren),    // input wire enb
-        .addrb(tag_storage_raddr),  // input wire [4 : 0] addrb
-        .doutb(tag_storage_rdata)   // output wire [99 : 0] doutb
-    );
+    reg [99:0] tag_storage_lutram[0:31];
+    reg [99:0] tag_storage_dout;
+
+    integer tag_lutram_i;
+    always @(posedge clk) begin
+        if (!rstn) begin
+
+            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1)
+            tag_storage_lutram[tag_lutram_i] <= 100'b0;
+
+            tag_storage_dout <= 100'b0;
+
+        end else begin
+            if (tag_storage_wen) tag_storage_lutram[tag_storage_waddr] <= tag_storage_wdata;
+            if (tag_storage_ren) tag_storage_dout <= tag_storage_lutram[tag_storage_raddr];
+        end
+    end
+
+    assign tag_storage_rdata = tag_storage_dout;
 
     /* INPUT-QUERY */
 
@@ -1707,21 +1728,21 @@ module Inst_cache_w32_addr32 (
     assign data_storage_wmask = 16'hFFFF;
 
     assign valid_storage_waddr = process_index;
-    assign valid_storage_wen   = process_state == STATE_REPLACE_READIN_FINALIZE;
-    assign valid_storage_din   = valid_storage_dout | (4'b0001 << process_final_set);
+    assign valid_storage_wen = process_state == STATE_REPLACE_READIN_FINALIZE;
+    assign valid_storage_din = valid_storage_dout | (4'b0001 << process_final_set);
 
     /* AXI FIXED VALUE */
 
     assign m_axi_arcache = 4'b1111;
-    assign m_axi_arlen   = 7;
+    assign m_axi_arlen = 7;
     assign m_axi_arburst = 2'b01;
-    assign m_axi_arsize  = 3'b100;
-    assign m_axi_arid    = 0;
-    assign m_axi_arlock  = 1'b0;
+    assign m_axi_arsize = 3'b100;
+    assign m_axi_arid = 0;
+    assign m_axi_arlock = 1'b0;
 
-    assign m_axi_arvalid       = process_state == STATE_REPLACE_READIN_SEND_ADDRESS;
-    assign m_axi_araddr        = {process_tag, process_index, 7'd0};
-    assign m_axi_rready        = process_state == STATE_REPLACE_READIN_RECEIVE_DATA;
+    assign m_axi_arvalid = process_state == STATE_REPLACE_READIN_SEND_ADDRESS;
+    assign m_axi_araddr = {process_tag, process_index, 7'd0};
+    assign m_axi_rready = process_state == STATE_REPLACE_READIN_RECEIVE_DATA;
 
     // When implementing fetch-error handling, remove this signal and use the one from the input
     wire clear_fetch_error = 0;
