@@ -311,6 +311,24 @@ module uart_axi (
 
     reg parity_error_calc;
 
+    // Eliminate indeterminate values
+
+    reg rx_sync1, rx_sync2, rx_sync3, rx_sync4;
+
+    always @(posedge clk) begin
+        if (!rstn) begin
+            rx_sync1 <= 1;
+            rx_sync2 <= 1;
+            rx_sync3 <= 1;
+            rx_sync4 <= 1;
+        end else begin
+            rx_sync1 <= rx;
+            rx_sync2 <= rx_sync1;
+            rx_sync3 <= rx_sync2;
+            rx_sync4 <= rx_sync3;
+        end
+    end
+
     always @(*)
         case (parity)
             PARITY_OFF: parity_error_calc = 0;
@@ -330,7 +348,7 @@ module uart_axi (
             case (rx_state)
 
                 UART_IDLE: begin
-                    if (!rx) begin
+                    if (!rx_sync3 && rx_sync4) begin
                         rx_shift_reg <= 9'h00;
                         rx_state     <= UART_START;
                     end
@@ -342,43 +360,43 @@ module uart_axi (
 
                 UART_DATA_0:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_DATA_1;
                 end
 
                 UART_DATA_1:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_DATA_2;
                 end
 
                 UART_DATA_2:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_DATA_3;
                 end
 
                 UART_DATA_3:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_DATA_4;
                 end
 
                 UART_DATA_4:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_DATA_5;
                 end
 
                 UART_DATA_5:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_DATA_6;
                 end
 
                 UART_DATA_6:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_DATA_7;
                 end
 
@@ -386,16 +404,16 @@ module uart_axi (
                 if (rx_clock_actuate) begin
                     if (parity != PARITY_OFF) begin
                         rx_state     <= UART_DATA_PARITY;
-                        rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                        rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     end else begin
                         rx_state     <= UART_STOP_0;
-                        rx_shift_reg <= {1'b0, rx, rx_shift_reg[8:2]};
+                        rx_shift_reg <= {1'b0, rx_sync4, rx_shift_reg[8:2]};
                     end
                 end
 
                 UART_DATA_PARITY:
                 if (rx_clock_actuate) begin
-                    rx_shift_reg <= {rx, rx_shift_reg[8:1]};
+                    rx_shift_reg <= {rx_sync4, rx_shift_reg[8:1]};
                     rx_state     <= UART_STOP_0;
                 end
 

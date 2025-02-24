@@ -19,7 +19,7 @@ module tb_noddr;
     // Generate a 100MHz clock signal
     initial begin
         clk_i = 1;
-        forever #(3.571) clk_i = ~clk_i;
+        forever #(2.5) clk_i = ~clk_i;
     end
 
     integer fd;

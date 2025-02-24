@@ -325,7 +325,8 @@ module Data_cache_w32_addr32 (
 
         end else begin
             if (tag_storage_wen) tag_storage_lutram[tag_storage_waddr] <= tag_storage_wdata;
-            if (tag_storage_ren) tag_storage_dout <= tag_storage_lutram[tag_storage_raddr];
+            if (tag_storage_ren)
+                tag_storage_dout <= tag_storage_wen && tag_storage_waddr == tag_storage_raddr ? tag_storage_wdata : tag_storage_lutram[tag_storage_raddr];
         end
     end
 
@@ -1588,7 +1589,8 @@ module Inst_cache_w32_addr32 (
 
         end else begin
             if (tag_storage_wen) tag_storage_lutram[tag_storage_waddr] <= tag_storage_wdata;
-            if (tag_storage_ren) tag_storage_dout <= tag_storage_lutram[tag_storage_raddr];
+            if (tag_storage_ren)
+                tag_storage_dout <= tag_storage_wen && tag_storage_waddr == tag_storage_raddr ? tag_storage_wdata : tag_storage_lutram[tag_storage_raddr];
         end
     end
 
