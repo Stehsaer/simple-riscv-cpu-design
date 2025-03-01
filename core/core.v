@@ -1,40 +1,64 @@
 module cpu_core_v6 (
+    (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 clk_i CLK" *)
+    (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF data:icache, ASSOCIATED_RESET rst_i" *)
     input wire clk_i,
     input wire rst_i,
 
     /* L1i Cache */
 
-    // Signals from IF stage
-    output wire if_product_ready_o,
-    input  wire cache_accept_ready_i,
+    output wire icache_arvalid,
+    input wire icache_arready,
+    output wire [31:0] icache_araddr,
+    output wire [7:0] icache_arlen,
+    output wire [3:0] icache_arcache,
+    output wire [2:0] icache_arburst,
+    output wire [0:0] icache_arid,
+    output wire [2:0] icache_arsize,
+    output wire icache_arlock,
 
-    // Signals to ID stage
-    output wire id_accept_ready_o,
-    input  wire cache_product_ready_i,
+    input wire icache_rvalid,
+    output wire icache_rready,
+    input wire [127:0] icache_rdata,
+    input wire icache_rlast,
+    input wire [0:0] icache_rid,
+    input wire [1:0] icache_rresp,
 
-    output wire [31:0] if_pc_o,
-    output wire [30:0] if_branch_target_o,
+    output wire data_awvalid,
+    input wire data_awready,
+    output wire [31:0] data_awaddr,
+    output wire [7:0] data_awlen,
+    output wire [3:0] data_awcache,
+    output wire [2:0] data_awsize,
+    output wire [1:0] data_awburst,  // FIXED
+    output wire [0:0] data_awid,  // FIXED
+    output wire data_awlock,  // FIXED
 
-    input wire [31:0] cache_pc_i,
-    input wire [31:0] cache_inst_i,
-    input wire [30:0] cache_branch_target_i,
+    output wire data_wvalid,
+    input wire data_wready,
+    output wire data_wlast,
+    output wire [127:0] data_wdata,
+    output wire [15:0] data_wstrb,
 
-    output wire flush_pipeline_o,
-    output wire flush_dcache_o,
-    input  wire flush_dcache_done_i,
+    input wire data_bvalid,
+    input wire [1:0] data_bresp,
+    output wire data_bready,
 
-    /* L1d Cache */
+    output wire data_arvalid,
+    input wire data_arready,
+    output wire [31:0] data_araddr,
+    output wire [7:0] data_arlen,
+    output wire [3:0] data_arcache,
+    output wire [2:0] data_arsize,
+    output wire [2:0] data_arburst,
+    output wire [0:0] data_arid,
+    output wire data_arlock,
 
-    output wire [29:0] ram_addr,
-
-    output wire ram_rd_ready,
-    input wire ram_rd_valid,
-    input wire [31:0] ram_rdata,
-
-    output wire ram_wr_valid,
-    output wire [3:0] ram_wr_byte,
-    output wire [31:0] ram_wdata,
-    input wire ram_busy
+    input wire data_rvalid,
+    output wire data_rready,
+    input wire [127:0] data_rdata,
+    input wire data_rlast,
+    input wire [0:0] data_rid,
+    input wire [1:0] data_rresp
 );
 
     `include "./control-signals.vh"
@@ -64,8 +88,10 @@ module cpu_core_v6 (
     /*========== Pipeline Signals ==========*/
 
     wire flush;
-
-    assign flush_pipeline_o = flush;
+    wire clean_dcache;
+    wire clean_dcache_done;
+    wire invalidate_icache;
+    wire invalidate_dcache;
 
     reg cache_id_valid, id_ex_valid, ex_mem1_valid, mem1_mem2_valid;
 
@@ -83,9 +109,6 @@ module cpu_core_v6 (
     assign ex_mem1_accept_ready   = !ex_mem1_valid || mem1_product_ready && mem1_mem2_accept_ready;
     assign mem1_mem2_accept_ready = !mem1_mem2_valid || mem2_product_ready && mem2_ready_go;
 
-    // Connect the cache signals
-    assign if_product_ready_o     = 1;
-    assign id_accept_ready_o      = cache_id_accept_ready;
 
     /*========== BP ==========*/
 
@@ -155,15 +178,142 @@ module cpu_core_v6 (
     reg [127:0] bp_target_valid_reg;
 
     always @(posedge clk_i or negedge rst_i) begin
-        if (!rst_i || flush_dcache_o) bp_target_valid_reg <= 128'b0;
+        if (!rst_i) bp_target_valid_reg <= 128'b0;
         else if (bp_target_wen) bp_target_valid_reg[bp_target_waddr[6:0]] <= 1;
     end
 
     assign bp_target_valid_rdata = bp_target_valid_reg[bp_target_raddr[6:0]];
 
+    /*========== ICACHE ==========*/
+
+    wire [31:0] icache_pc_out;
+    wire [31:0] icache_inst_out;
+    wire [30:0] icache_branch_target_out;
+
+    wire [31:0] icache_pc_in;
+    wire [30:0] icache_branch_target_in;
+
+    wire icache_valid;
+    wire icache_ready;
+
+    Inst_cache_w32_addr32 inst_cache (
+        .m_axi_aclk   (clk_i),
+        .m_axi_aresetn(rst_i),
+
+        .input_valid    (1'b1),
+        .cache_ready    (icache_ready),
+        .pc_i           (icache_pc_in),
+        .branch_target_i(icache_branch_target_in),
+
+        .output_ready   (cache_id_accept_ready),
+        .cache_valid    (icache_valid),
+        .pc_o           (icache_pc_out),
+        .branch_target_o(icache_branch_target_out),
+        .inst_o         (icache_inst_out),
+
+        .fence_i(invalidate_icache),
+        .flush_i(flush),
+
+        // // Output control signal
+        // output wire address_misaligned,
+        // output reg  fetch_error,
+        // // input wire clear_fetch_error,
+
+        .m_axi_arready(icache_arready),
+        .m_axi_arvalid(icache_arvalid),
+        .m_axi_araddr (icache_araddr),
+        .m_axi_arlen  (icache_arlen),
+        .m_axi_arcache(icache_arcache),
+        .m_axi_arburst(icache_arburst),
+        .m_axi_arid   (icache_arid),
+        .m_axi_arsize (icache_arsize),
+        .m_axi_arlock (icache_arlock),
+
+        .m_axi_rvalid(icache_rvalid),
+        .m_axi_rready(icache_rready),
+        .m_axi_rdata (icache_rdata),
+        .m_axi_rlast (icache_rlast),
+        .m_axi_rid   (icache_rid),
+        .m_axi_rresp (icache_rresp)
+    );
+
+    /*========== DCACHE ==========*/
+
+    wire [29:0] dcache_addr;
+
+    wire dcache_wen;
+    wire [31:0] dcache_din;
+    wire [3:0] dcache_wmask;
+    wire dcache_ren;
+    wire dcache_rresp;
+    wire [31:0] dcache_dout;
+    wire dcache_busy;
+    wire dcache_flush_en;
+    wire dcache_flush_done;
+
+    assign dcache_flush_en   = clean_dcache;
+    assign clean_dcache_done = dcache_flush_done;
+
+    Data_cache_w32_addr32 data_cache (
+        .m_axi_aclk(clk_i),
+        .m_axi_aresetn(rst_i),
+
+        .addr(dcache_addr),
+
+        .wen  (dcache_wen),
+        .din  (dcache_din),
+        .wmask(dcache_wmask),
+
+        .ren  (dcache_ren),
+        .rresp(dcache_rresp),
+        .dout (dcache_dout),
+
+        .busy(dcache_busy),
+
+        .flush_en  (dcache_flush_en),
+        .flush_done(dcache_flush_done),
+
+        .m_axi_awaddr (data_awaddr),
+        .m_axi_awlen  (data_awlen),
+        .m_axi_awsize (data_awsize),
+        .m_axi_awburst(data_awburst),
+        .m_axi_awlock (data_awlock),
+        .m_axi_awcache(data_awcache),
+        .m_axi_awid   (data_awid),
+        .m_axi_awvalid(data_awvalid),
+        .m_axi_awready(data_awready),
+
+        .m_axi_wdata (data_wdata),
+        .m_axi_wstrb (data_wstrb),
+        .m_axi_wlast (data_wlast),
+        .m_axi_wvalid(data_wvalid),
+        .m_axi_wready(data_wready),
+
+        .m_axi_bvalid(data_bvalid),
+        .m_axi_bready(data_bready),
+        .m_axi_bresp (data_bresp),
+
+        .m_axi_araddr (data_araddr),
+        .m_axi_arlen  (data_arlen),
+        .m_axi_arsize (data_arsize),
+        .m_axi_arburst(data_arburst),
+        .m_axi_arlock (data_arlock),
+        .m_axi_arcache(data_arcache),
+        .m_axi_arid   (data_arid),
+        .m_axi_arvalid(data_arvalid),
+        .m_axi_arready(data_arready),
+
+        .m_axi_rdata (data_rdata),
+        .m_axi_rresp (data_rresp),
+        .m_axi_rlast (data_rlast),
+        .m_axi_rvalid(data_rvalid),
+        .m_axi_rready(data_rready)
+    );
+
     /*========== IF ==========*/
 
     reg [31:0] if_pc;  // 系统总PC，按字节编址
+    assign icache_pc_in = if_pc;
 
     wire [31:0] if_pc_wdata;  // PC写入数值
     wire if_pc_wen;  // PC写入使能
@@ -177,28 +327,25 @@ module cpu_core_v6 (
         && bp_target_cache_address_hit;
 
     wire [30:0] if_branch_target = if_branch_taken ? bp_target_rdata[30:0] : {if_pc[31:2] + 1, 1'b0};
+    assign icache_branch_target_in = if_branch_target;
 
-    assign bp_history_raddr = if_pc[9:2];
-    assign bp_counter_raddr = bp_history_rdata;
-    assign bp_target_raddr  = if_pc[8:2];
+    assign bp_history_raddr        = if_pc[9:2];
+    assign bp_counter_raddr        = bp_history_rdata;
+    assign bp_target_raddr         = if_pc[8:2];
 
-    assign if_ready_go      = 1;
+    assign if_ready_go             = 1;
 
     parameter PC_INIT = 32'h0010_0000;
 
     always @(posedge clk_i or negedge rst_i) begin
         if (!rst_i) if_pc <= PC_INIT;
         else if (if_pc_wen) if_pc <= if_pc_wdata;
-        else if (cache_accept_ready_i) begin  // Increase PC only when Cache is ready
+        else if (icache_ready) begin  // Increase PC only when Cache is ready
             if_pc <= {if_branch_target, 1'b0};
         end
     end
 
-    assign if_pc_o            = if_pc;
-    assign if_branch_taken_o  = if_branch_taken;
-    assign if_branch_target_o = if_branch_target;
-
-    /* Pre-Decode */
+    /*========== CACHE-OUTPUT-DECODE ==========*/
 
     wire [3:0] cache_inst_alu_op;
     wire [1:0] cache_inst_alu_section;
@@ -214,8 +361,8 @@ module cpu_core_v6 (
     wire cache_inst_fencei;
 
     inst_decode_v2_stage1 inst_decode_stage1 (
-        .inst_i(cache_inst_i),
-        .pc_i  (cache_pc_i),
+        .inst_i(icache_inst_out),
+        .pc_i  (icache_pc_out),
 
         .alu_section_o(cache_inst_alu_section),
         .alu_op_o(cache_inst_alu_op),
@@ -278,10 +425,10 @@ module cpu_core_v6 (
         end else if (flush) begin
             cache_id_valid <= 0;
         end else if (cache_id_accept_ready) begin
-            cache_id_valid <= cache_product_ready_i;
-            if (cache_product_ready_i) begin
-                cache_id_inst         <= cache_inst_i;
-                cache_id_pc           <= cache_pc_i;
+            cache_id_valid <= icache_valid;
+            if (icache_valid) begin
+                cache_id_inst         <= icache_inst_out;
+                cache_id_pc           <= icache_pc_out;
 
                 cache_id_alu_op       <= cache_inst_alu_op;
                 cache_id_alu_section  <= cache_inst_alu_section;
@@ -296,7 +443,7 @@ module cpu_core_v6 (
                 cache_id_cmp_op       <= cache_inst_cmp_op;
                 cache_id_mem_op       <= cache_inst_mem_op;
                 cache_id_bp_enabled   <= cache_inst_bp_enabled;
-                cache_id_bp_target    <= cache_branch_target_i;
+                cache_id_bp_target    <= icache_branch_target_out;
                 cache_id_fencei       <= cache_inst_fencei;
             end
         end
@@ -443,13 +590,16 @@ module cpu_core_v6 (
     assign ex_id_wb_valid = id_ex_valid && id_ex_mem_op == MEM_OP_NONE;
     assign ex_id_wb_reg_feedback = id_ex_valid && id_ex_mem_op[4:3] != MEM_OP_ST ? id_ex_wb_reg : 0;
 
-    reg ex_fencei_inprogress;
+    reg  ex_fencei_inprogress;
 
-    assign flush_dcache_o = ex_fencei_inprogress && !ram_busy && !flush_dcache_done_i;
+    wire ex_fencei = ex_fencei_inprogress && !dcache_busy && !dcache_flush_done;
+
+    assign clean_dcache      = ex_fencei;
+    assign invalidate_icache = ex_fencei;
 
     always @(posedge clk_i) begin
         if (!rst_i) ex_fencei_inprogress <= 0;
-        else if (flush_dcache_done_i) ex_fencei_inprogress <= 0;
+        else if (dcache_flush_done) ex_fencei_inprogress <= 0;
         else if (id_ex_valid && id_ex_fencei) ex_fencei_inprogress <= 1;
     end
 
@@ -457,8 +607,8 @@ module cpu_core_v6 (
 
     assign ex_ready_go = 
 		id_ex_mem_op[4:3] == MEM_OP_NONE 
-		? !alu_busy && (ex_fencei_inprogress ? flush_dcache_done_i : !id_ex_fencei)
-		: ((id_ex_mem_op[4:3] == MEM_OP_LD || id_ex_mem_op[4:3] == MEM_OP_ST) ? !ram_busy && id_ex_valid : 1);
+		? !alu_busy && (ex_fencei_inprogress ? dcache_flush_done : !id_ex_fencei)
+		: ((id_ex_mem_op[4:3] == MEM_OP_LD || id_ex_mem_op[4:3] == MEM_OP_ST) ? !dcache_busy && id_ex_valid : 1);
 
     alu alu_module (
         .clk_i(clk_i),
@@ -491,12 +641,12 @@ module cpu_core_v6 (
         .ram_ren_o  (ex_ram_rd_ready)
     );
 
-    assign ram_addr     = ex_ram_addr;
-    assign ram_wdata    = ex_ram_wdata;
-    assign ram_wr_byte  = ex_ram_wr_byte;
+    assign dcache_addr  = ex_ram_addr;
+    assign dcache_din   = ex_ram_wdata;
+    assign dcache_wmask = ex_ram_wr_byte;
 
-    assign ram_wr_valid = id_ex_valid && id_ex_mem_op[4:3] == 2'b10 && ex_ram_wr_byte != 0;
-    assign ram_rd_ready = id_ex_valid && id_ex_mem_op[4:3] == 2'b01;
+    assign dcache_wen   = id_ex_valid && id_ex_mem_op[4:3] == 2'b10 && ex_ram_wr_byte != 0;
+    assign dcache_ren   = id_ex_valid && id_ex_mem_op[4:3] == 2'b01;
 
     // Branch
 
@@ -507,14 +657,14 @@ module cpu_core_v6 (
         .do_branch_o(ex_do_branch)
     );
 
-    assign if_pc_wdata = id_ex_pc_sel && ex_do_branch && !flush_dcache_done_i ? ex_alu_add_result : id_ex_pc + 4;
+    assign if_pc_wdata = id_ex_pc_sel && ex_do_branch && !dcache_flush_done ? ex_alu_add_result : id_ex_pc + 4;
     wire ex_branch_address_correct = id_ex_bp_target == if_pc_wdata[31:1];
 
     assign if_pc_wen = ex_product_ready && ex_mem1_accept_ready && (id_ex_pc_sel
         // Branch if: 
         // 1. Branch misprediction / Branch address incorrect
         // 2. Flush dcache has done
-        && !ex_branch_address_correct || flush_dcache_done_i);
+        && !ex_branch_address_correct || dcache_flush_done);
 
     assign flush = if_pc_wen;
 
@@ -634,7 +784,7 @@ module cpu_core_v6 (
         end
     end
 
-    assign mem2_ready_go = mem1_mem2_mem_op[4:3] == MEM_OP_LD ? ram_rd_valid && mem1_mem2_valid : 1;
+    assign mem2_ready_go = mem1_mem2_mem_op[4:3] == MEM_OP_LD ? dcache_rresp && mem1_mem2_valid : 1;
 
     wire [31:0] mem2_ram_rdata;
     reg [31:0] mem2_reg_wdata;
@@ -660,7 +810,7 @@ module cpu_core_v6 (
     memory_stage2 memory_module2 (
         .mem_op_i  (mem1_mem2_mem_op),
         .mem_addr_i(mem1_mem2_alu_result),
-        .ram_data_i(ram_rdata),
+        .ram_data_i(dcache_dout),
 
         .mem_rdata_o(mem2_ram_rdata)
     );

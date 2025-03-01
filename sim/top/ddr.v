@@ -132,12 +132,12 @@ module tb_cpu_ddr;
 
     integer fd;
 
-    always @(posedge top.ddr_design_i.cpu.core_module.inst.u_cpu_core.clk_i) begin
-        if (top.ddr_design_i.cpu.core_module.inst.u_cpu_core.reg_file_wen && top.ddr_design_i.cpu.core_module.inst.u_cpu_core.reg_file_waddr != 0 ) begin
+    always @(posedge top.ddr_design_i.cpu.inst.clk_i) begin
+        if (top.ddr_design_i.cpu.inst.reg_file_wen && top.ddr_design_i.cpu.inst.reg_file_waddr != 0 ) begin
             $fdisplay(fd, "%h, Reg, x%02d, %h",
-                      top.ddr_design_i.cpu.core_module.inst.u_cpu_core.mem1_mem2_pc4 - 4,
-                      top.ddr_design_i.cpu.core_module.inst.u_cpu_core.reg_file_waddr,
-                      top.ddr_design_i.cpu.core_module.inst.u_cpu_core.reg_file_wdata);
+                      top.ddr_design_i.cpu.inst.mem1_mem2_pc4 - 4,
+                      top.ddr_design_i.cpu.inst.reg_file_waddr,
+                      top.ddr_design_i.cpu.inst.reg_file_wdata);
         end
 
         if(top.ddr_design_i.uart_module.inst.tx_fifo.wr_en) begin

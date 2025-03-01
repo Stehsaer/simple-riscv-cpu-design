@@ -24,18 +24,18 @@ module tb_noddr;
 
     integer fd;
 
-    always @(posedge top.cpu.core_module.inst.u_cpu_core.clk_i) begin
-        if (top.cpu.core_module.inst.u_cpu_core.reg_file_wen && top.cpu.core_module.inst.u_cpu_core.reg_file_waddr != 0 ) begin
+    always @(posedge top.cpu.inst.clk_i) begin
+        if (top.cpu.inst.reg_file_wen && top.cpu.inst.reg_file_waddr != 0 ) begin
             $fdisplay(fd, "%08h, Reg, x%02d, %h",
-                      top.cpu.core_module.inst.u_cpu_core.mem1_mem2_pc4 - 4,
-                      top.cpu.core_module.inst.u_cpu_core.reg_file_waddr,
-                      top.cpu.core_module.inst.u_cpu_core.reg_file_wdata);
+                      top.cpu.inst.mem1_mem2_pc4 - 4,
+                      top.cpu.inst.reg_file_waddr,
+                      top.cpu.inst.reg_file_wdata);
         end
 
-        // if (top.cpu.core_module.inst.u_cpu_core.ex_mem1_accept_ready && top.cpu.core_module.inst.u_cpu_core.ex_product_ready) begin
+        // if (top.cpu.inst.ex_mem1_accept_ready && top.cpu.inst.ex_product_ready) begin
         //     $fdisplay(fd, "%08h, %08h",
-        //               top.cpu.core_module.inst.u_cpu_core.id_ex_pc,
-        //               top.cpu.core_module.inst.u_cpu_core.id_ex_inst
+        //               top.cpu.inst.id_ex_pc,
+        //               top.cpu.inst.id_ex_inst
         //               );
         // end
 
