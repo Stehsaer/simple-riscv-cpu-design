@@ -40,24 +40,4 @@ module branch (
             default: do_branch = 0;
         endcase
     end
-
-    // old
-
-    // always @(*) begin
-    //     case (op)
-    //         2'b00: do_branch = 0;
-    //         2'b01:
-    //         case (func)
-    //             3'b000:  do_branch = (cmp_num1_i == cmp_num2_i);
-    //             3'b001:  do_branch = (cmp_num1_i != cmp_num2_i);
-    //             3'b100:  do_branch = (cmp_num1_signed < cmp_num2_signed);
-    //             3'b101:  do_branch = (cmp_num1_signed >= cmp_num2_signed);
-    //             3'b110:  do_branch = (cmp_num1_i < cmp_num2_i);
-    //             3'b111:  do_branch = (cmp_num1_i >= cmp_num2_i);
-    //             default: do_branch = 0;
-    //         endcase
-    //         2'b10: do_branch = 1;
-    //         default: do_branch = 0;
-    //     endcase
-    // end
 endmodule

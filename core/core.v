@@ -1,4 +1,4 @@
-module cpu_core_v6 (
+module cpu_core (
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 clk_i CLK" *)
     (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF data:icache, ASSOCIATED_RESET rst_i" *)
     input wire clk_i,
