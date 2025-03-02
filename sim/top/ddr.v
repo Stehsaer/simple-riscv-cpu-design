@@ -234,15 +234,15 @@ module tb_cpu_ddr;
         input [7:0] data; 
 
         begin
-            wait (top.ddr_design_i.cpu.core_module.clk_i == 0);
-            wait (top.ddr_design_i.cpu.core_module.clk_i == 1);
+            wait (top.ddr_design_i.cpu.clk_i == 0);
+            wait (top.ddr_design_i.cpu.clk_i == 1);
             #1;
 
             force top.ddr_design_i.uart_module.inst.rx_fifo.wr_en = 1;
             force top.ddr_design_i.uart_module.inst.rx_fifo.din = data;
 
-            wait (top.ddr_design_i.cpu.core_module.clk_i == 0);
-            wait (top.ddr_design_i.cpu.core_module.clk_i == 1);
+            wait (top.ddr_design_i.cpu.clk_i == 0);
+            wait (top.ddr_design_i.cpu.clk_i == 1);
             #1;
 
             release top.ddr_design_i.uart_module.inst.rx_fifo.wr_en;

@@ -78,22 +78,20 @@ module alu_muldiv (
 
 
     wire [31:0] div_dividend, div_divisor;
-    wire [63:0] div_result;
+    wire [31:0] div_quotient, div_remainder;
 
     wire div_done;
     wire div_tx_valid;
 
-    div_radix2 div_module (
-        .aclk(clk),
-        .aresetn(rstn),
-        .s_axis_divisor_tvalid(div_tx_valid),
-        .s_axis_divisor_tready(),
-        .s_axis_divisor_tdata(div_divisor),
-        .s_axis_dividend_tvalid(div_tx_valid),
-        .s_axis_dividend_tready(),
-        .s_axis_dividend_tdata(div_dividend),
-        .m_axis_dout_tvalid(div_done),
-        .m_axis_dout_tdata(div_result)
+    base4_divider div_module (
+        .clk(clk),
+        .rstn(rstn),
+        .dividend(div_dividend),
+        .divisor(div_divisor),
+        .input_valid(div_tx_valid),
+        .quotient(div_quotient),
+        .remainder(div_remainder),
+        .output_valid(div_done)
     );
 
 
@@ -185,12 +183,12 @@ module alu_muldiv (
             divide_by_zero, result_sign_flip
         })
             2'b00: begin
-                div_result_quotient  = div_result[63:32];
-                div_result_remainder = div_result[31:0];
+                div_result_quotient  = div_quotient;
+                div_result_remainder = div_remainder;
             end
             2'b01: begin
-                div_result_quotient  = -div_result[63:32];
-                div_result_remainder = -div_result[31:0];
+                div_result_quotient  = -div_quotient;
+                div_result_remainder = -div_remainder;
             end
             2'b10, 2'b11: begin
                 div_result_quotient  = 32'hFFFFFFFF;
