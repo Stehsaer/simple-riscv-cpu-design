@@ -59,7 +59,7 @@ endmodule
 
 module base4_divider (
     input wire clk,
-    input wire rstn,
+    input wire rst,
 
     input wire [31:0] dividend,
     input wire [31:0] divisor,
@@ -164,7 +164,7 @@ module base4_divider (
     // ===== STATE MACHINE =====
 
     always @(posedge clk)
-        if (!rstn) begin
+        if (rst) begin
             cycle_counter            <= 0;
             state                    <= STATE_IDLE;
             dividend_reg             <= 0;

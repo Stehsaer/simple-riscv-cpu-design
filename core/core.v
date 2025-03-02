@@ -177,8 +177,8 @@ module cpu_core (
 
     reg [127:0] bp_target_valid_reg;
 
-    always @(posedge clk_i or negedge rst_i) begin
-        if (!rst_i) bp_target_valid_reg <= 128'b0;
+    always @(posedge clk_i) begin
+        if (rst_i) bp_target_valid_reg <= 128'b0;
         else if (bp_target_wen) bp_target_valid_reg[bp_target_waddr[6:0]] <= 1;
     end
 
@@ -197,8 +197,8 @@ module cpu_core (
     wire icache_ready;
 
     Inst_cache_w32_addr32 inst_cache (
-        .m_axi_aclk   (clk_i),
-        .m_axi_aresetn(rst_i),
+        .clk(clk_i),
+        .rst(rst_i),
 
         .input_valid    (1'b1),
         .cache_ready    (icache_ready),
@@ -255,8 +255,8 @@ module cpu_core (
     assign clean_dcache_done = dcache_flush_done;
 
     Data_cache_w32_addr32 data_cache (
-        .m_axi_aclk(clk_i),
-        .m_axi_aresetn(rst_i),
+        .clk(clk_i),
+        .rst(rst_i),
 
         .addr(dcache_addr),
 
@@ -337,8 +337,8 @@ module cpu_core (
 
     parameter PC_INIT = 32'h0010_0000;
 
-    always @(posedge clk_i or negedge rst_i) begin
-        if (!rst_i) if_pc <= PC_INIT;
+    always @(posedge clk_i) begin
+        if (rst_i) if_pc <= PC_INIT;
         else if (if_pc_wen) if_pc <= if_pc_wdata;
         else if (icache_ready) begin  // Increase PC only when Cache is ready
             if_pc <= {if_branch_target, 1'b0};
@@ -400,8 +400,8 @@ module cpu_core (
     reg [30:0] cache_id_bp_target;
     reg cache_id_fencei;
 
-    always @(posedge clk_i or negedge rst_i) begin
-        if (!rst_i) begin
+    always @(posedge clk_i) begin
+        if (rst_i) begin
             cache_id_inst         <= 0;
             cache_id_pc           <= 0;
 
@@ -523,8 +523,8 @@ module cpu_core (
 
     reg [31:0] id_ex_pc;
 
-    always @(posedge clk_i or negedge rst_i) begin
-        if (!rst_i) begin
+    always @(posedge clk_i) begin
+        if (rst_i) begin
             id_ex_bp_target    <= 0;
             id_ex_alu_op       <= 0;
             id_ex_alu_section  <= 0;
@@ -598,7 +598,7 @@ module cpu_core (
     assign invalidate_icache = ex_fencei;
 
     always @(posedge clk_i) begin
-        if (!rst_i) ex_fencei_inprogress <= 0;
+        if (rst_i) ex_fencei_inprogress <= 0;
         else if (dcache_flush_done) ex_fencei_inprogress <= 0;
         else if (id_ex_valid && id_ex_fencei) ex_fencei_inprogress <= 1;
     end
@@ -673,7 +673,7 @@ module cpu_core (
     reg [31:0] bp_wb_pc, bp_add_result;
 
     always @(posedge clk_i) begin
-        if (!rst_i) begin
+        if (rst_i) begin
             bp_wen        <= 0;
             bp_do_branch  <= 0;
             bp_wb_pc      <= 0;
@@ -717,8 +717,8 @@ module cpu_core (
     reg [ 4:0] ex_mem1_wb_reg;
     reg [31:1] ex_mem1_wb_reg_onfly;
 
-    always @(posedge clk_i or negedge rst_i) begin
-        if (!rst_i) begin
+    always @(posedge clk_i) begin
+        if (rst_i) begin
             ex_mem1_alu_result   <= 0;
             ex_mem1_pc4          <= 0;
             ex_mem1_mem_op       <= 0;
@@ -762,8 +762,8 @@ module cpu_core (
     reg [ 1:0] mem1_mem2_wb_sel;
     reg [31:1] mem1_mem2_wb_reg_onfly;
 
-    always @(posedge clk_i or negedge rst_i) begin
-        if (!rst_i) begin
+    always @(posedge clk_i) begin
+        if (rst_i) begin
             mem1_mem2_wb_reg       <= 0;
             mem1_mem2_mem_op       <= 0;
             mem1_mem2_alu_result   <= 0;

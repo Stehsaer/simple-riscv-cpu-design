@@ -38,7 +38,7 @@ endmodule
 
 module alu_muldiv (
     input wire clk,
-    input wire rstn,
+    input wire rst,
     input wire [2:0] op,
     input wire input_valid,
     input wire [31:0] num1,
@@ -67,7 +67,8 @@ module alu_muldiv (
 
     // ===== MODULES =====
 
-    wire [31:0] mul_num1, mul_num2, mul_result;
+    wire [31:0] mul_num1, mul_num2;
+    wire [63:0] mul_result;
 
     mult_dsp mul_module (
         .CLK(clk),
@@ -85,7 +86,7 @@ module alu_muldiv (
 
     base4_divider div_module (
         .clk(clk),
-        .rstn(rstn),
+        .rst(rst),
         .dividend(div_dividend),
         .divisor(div_divisor),
         .input_valid(div_tx_valid),
@@ -148,7 +149,7 @@ module alu_muldiv (
     assign div_tx_valid = input_valid && state != STATE_DIV_WAIT && op_is_division;
 
     always @(posedge clk)
-        if (!rstn) state <= STATE_IDLE;
+        if (rst) state <= STATE_IDLE;
         else
             case (state)
                 STATE_IDLE:
@@ -202,7 +203,7 @@ module alu_muldiv (
         case (op)
             OP_MUL: result = mul_result_signed[31:0];
 
-            OP_MULH, OP_MULH, OP_MULHSU: result = mul_result_signed[63:32];
+            OP_MULH, OP_MULHU, OP_MULHSU: result = mul_result_signed[63:32];
 
             OP_DIV, OP_DIVU: result = div_result_quotient;
 
@@ -264,7 +265,7 @@ module alu (
 
     alu_muldiv muldiv_module (
         .clk(clk_i),
-        .rstn(rst_i),
+        .rst(rst_i),
         .op(alu_op_i[2:0]),
         .input_valid(alu_valid_i && alu_section_i == ALU_SECTION_MULDIV),
         .num1(alu_num1_i),

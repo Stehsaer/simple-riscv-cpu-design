@@ -11,23 +11,23 @@ module reg_file (
     output wire [31:0] rdata2_o
 );
 
-  reg [31:0] reg_file[1:31];
+    reg [31:0] reg_file[1:31];
 
-  integer i;
+    integer i;
 
-  always @(posedge clk_i or negedge rst_i) begin
-    if (!rst_i)
-      for (i = 1; i < 32; i = i + 1) begin
-        reg_file[i] <= 32'd0;
-      end
-    else begin
-      if (wen_i && waddr_i != 0) begin
-        reg_file[waddr_i] <= wdata_i;
-      end
+    always @(posedge clk_i) begin
+        if (rst_i)
+            for (i = 1; i < 32; i = i + 1) begin
+                reg_file[i] <= 32'd0;
+            end
+        else begin
+            if (wen_i && waddr_i != 0) begin
+                reg_file[waddr_i] <= wdata_i;
+            end
+        end
     end
-  end
 
-  assign rdata1_o = raddr1_i == 0 ? 32'd0 : reg_file[raddr1_i];
-  assign rdata2_o = raddr2_i == 0 ? 32'd0 : reg_file[raddr2_i];
+    assign rdata1_o = raddr1_i == 0 ? 32'd0 : reg_file[raddr1_i];
+    assign rdata2_o = raddr2_i == 0 ? 32'd0 : reg_file[raddr2_i];
 
 endmodule

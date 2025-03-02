@@ -106,8 +106,8 @@ endmodule
 
 
 module Data_cache_w32_addr32 (
-    input wire m_axi_aclk,
-    input wire m_axi_aresetn,
+    input wire clk,
+    input wire rst,
 
     /* Internal Bus Signals: CPU CORE <=> Cache */
 
@@ -229,9 +229,6 @@ module Data_cache_w32_addr32 (
 
     /* PIPELINE SIGNALS */
 
-    wire clk = m_axi_aclk;
-    wire rstn = m_axi_aresetn;
-
     // Data in interstage register is valid?
     reg query_process_valid, process_output_valid;
     wire input_query_valid = wen || ren || flush_en;
@@ -271,7 +268,7 @@ module Data_cache_w32_addr32 (
 
     integer valid_lutram_i;
     always @(posedge clk) begin
-        if (!rstn) begin
+        if (rst) begin
 
             for (valid_lutram_i = 0; valid_lutram_i < 32; valid_lutram_i = valid_lutram_i + 1)
             valid_storage_lutram[valid_lutram_i] <= 4'h0;
@@ -316,7 +313,7 @@ module Data_cache_w32_addr32 (
 
     integer tag_lutram_i;
     always @(posedge clk) begin
-        if (!rstn) begin
+        if (rst) begin
 
             for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1)
             tag_storage_lutram[tag_lutram_i] <= 102'b0;
@@ -709,8 +706,8 @@ module Data_cache_w32_addr32 (
     reg [3:0] query_process_wmask;
     reg query_process_rreq, query_process_wreq, query_process_flushreq;
 
-    always @(posedge m_axi_aclk) begin
-        if (!m_axi_aresetn) begin
+    always @(posedge clk) begin
+        if (rst) begin
             query_process_valid    <= 0;
             query_process_addr     <= 0;
             query_process_rreq     <= 0;
@@ -929,7 +926,7 @@ module Data_cache_w32_addr32 (
         endcase
 
     always @(posedge clk) begin
-        if (!rstn) begin
+        if (rst) begin
             process_state       <= STATE_NORMAL;
 
             // Other variables
@@ -1396,7 +1393,7 @@ module Data_cache_w32_addr32 (
         endcase
 
     always @(posedge clk) begin
-        if (!rstn) begin
+        if (rst) begin
 
             process_output_valid         <= 0;
             process_output_rreq          <= 0;
@@ -1420,8 +1417,8 @@ module Data_cache_w32_addr32 (
 endmodule
 
 module Inst_cache_w32_addr32 (
-    input wire m_axi_aclk,
-    input wire m_axi_aresetn,
+    input wire clk,
+    input wire rst,
 
     /* Internal Bus Signals: CPU CORE <=> Cache */
 
@@ -1496,9 +1493,6 @@ module Inst_cache_w32_addr32 (
 
     /* PIPELINE SIGNALS */
 
-    wire clk = m_axi_aclk;
-    wire rstn = m_axi_aresetn;
-
     wire pipeline_flush = flush_i || fence_i;
     wire process_working;
 
@@ -1535,7 +1529,7 @@ module Inst_cache_w32_addr32 (
 
     integer valid_lutram_i;
     always @(posedge clk) begin
-        if (!rstn || fence_i) begin
+        if (rst || fence_i) begin
 
             for (valid_lutram_i = 0; valid_lutram_i < 32; valid_lutram_i = valid_lutram_i + 1)
             valid_storage_lutram[valid_lutram_i] <= 4'h0;
@@ -1580,7 +1574,7 @@ module Inst_cache_w32_addr32 (
 
     integer tag_lutram_i;
     always @(posedge clk) begin
-        if (!rstn) begin
+        if (rst) begin
 
             for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1)
             tag_storage_lutram[tag_lutram_i] <= 100'b0;
@@ -1618,7 +1612,7 @@ module Inst_cache_w32_addr32 (
     reg [30:0] query_process_branch_target;
 
     always @(posedge clk) begin
-        if (!rstn) begin
+        if (rst) begin
             query_process_valid         <= 0;
             query_process_addr          <= 0;
             query_process_branch_target <= 0;
@@ -1750,14 +1744,14 @@ module Inst_cache_w32_addr32 (
     wire clear_fetch_error = 0;
 
     always @(posedge clk) begin
-        if (!rstn || clear_fetch_error) fetch_error <= 0;
+        if (rst || clear_fetch_error) fetch_error <= 0;
         else if (m_axi_rvalid && m_axi_rlast && m_axi_rresp != 2'b00) fetch_error <= 1;
     end
 
     // State machine
 
     always @(posedge clk)
-        if (!rstn) begin
+        if (rst) begin
             process_state          <= STATE_NORMAL;
             process_readin_counter <= 0;
         end else
@@ -1810,7 +1804,7 @@ module Inst_cache_w32_addr32 (
         endcase
 
     always @(posedge clk)
-        if (!rstn) begin
+        if (rst) begin
             process_output_valid         <= 0;
             process_output_addr          <= 0;
             process_output_branch_target <= 0;
