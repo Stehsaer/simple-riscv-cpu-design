@@ -99,12 +99,12 @@ Not doable in short-term:
 
 #### Architecture-level
 
-- `Zicond` extension along with extendable and modular CSR design (specification not yet finished reading, need to make a designing sheet for CSRs)
-- Interrupt/Exception (`Zicond` required)
-- `F` extension (`Zicond` required)
+- `Zicsr` extension along with extendable and modular CSR design (specification not yet finished reading, need to make a designing sheet for CSRs)
+- Interrupt/Exception (`Zicsr` required)
+- `F` extension (`Zicsr` required)
 - `C` extension (CPU architecture not yet suitable, needs some cleanup and refactoring to the architecture; would cause absolute mess if implement it now)
 - DMA (coherency issue)
-- Priviledged architecture (`Zicond` required, lacking OS knowledge)
+- Priviledged architecture (`Zicsr` required, lacking OS knowledge)
 
 #### Peripheral
 
