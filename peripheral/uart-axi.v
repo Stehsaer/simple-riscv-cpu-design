@@ -1,3 +1,29 @@
+// |=====================|
+// | UART AXI Peripheral |
+// |=====================|
+//
+// | Address | Access | Name
+// |---------|--------|-------------
+// | 0x00    | W      | TX
+// | 0x04    | R      | RX
+// | 0x08    | R/W    | CFG
+// | 0x0C    | R/W    | STATUS
+//
+// ## TX
+//     Writing to TX will put the char into transmitting FIFO, eventually gets transmitted
+// ## RX
+//     Reading from RX will extract one char from receiving FIFO
+// ## CFG
+//     Config Register
+//     - [23: 0] Baudrate divider
+//     - [26:24] Parity config, see ONFIG CONSTANTS in the code
+//     - [27:27] Stopbits config, see ONFIG CONSTANTS in the code
+// ## STATUS
+//     Status Register
+//     - [0] Receiving FIFO not empty
+//     - [1] Transmitting FIFO not full
+//     - [2] Parity error, write 0 to clear
+
 module uart_axi (
 
     /* AXI INTERFACE */
