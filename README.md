@@ -21,6 +21,7 @@ Located under folder `./core`
 Located under folder `./peripheral`
 
 - UART transmitter/receiver with runtime variable config
+- Timer peripheral (interrupt not implemented yet)
 
 ## CPU Features
 
@@ -76,7 +77,6 @@ Doable with in a short period of time, with designs that are ready and can be im
 
 #### Peripherals
 
-- Timer peripheral
 - SPI communication peripheral (prerequisite for SD card, OLED etc.)
 - I2C communication peripheral (for RTC)
 

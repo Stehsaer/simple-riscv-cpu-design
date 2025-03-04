@@ -2,5 +2,7 @@ wave-cfg/*
 .vscode/*
 archive/*
 .VSCodeCounter/*
+sim/*
+template/*
 
 constraints/debug-probe.xdc

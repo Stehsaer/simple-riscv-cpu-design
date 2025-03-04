@@ -48,7 +48,7 @@ module uart_axi (
     input wire bready,
 
     // AR
-    input wire [7:0] araddr,
+    input wire [11:0] araddr,
     input wire [3:0] arprot,
     input wire arvalid,
     output wire arready,
