@@ -13,8 +13,7 @@ Located under folder `./core`
 - Branch Unit
 - Interface unit to L1d
 - L1 Icache & L1 Dcache
-  - `cache-w32-addr32.v`: the latest version with 128bits design and way better timing performance
-  - `cache.v`: previous version, slower with smaller cache line size and narrower bus width. Kept in case the newer version breaks
+  - `cache-w32-addr32.v`: the latest version with 128bits design and way better timing performance. 32bit interface, 32bit physical address, no virtual address translation.
 
 ### Peripheral
 
@@ -22,6 +21,7 @@ Located under folder `./peripheral`
 
 - UART transmitter/receiver with runtime variable config
 - Timer peripheral (interrupt not implemented yet)
+- Fast SPI communication peripheral
 
 ## CPU Features
 
@@ -77,7 +77,6 @@ Doable with in a short period of time, with designs that are ready and can be im
 
 #### Peripherals
 
-- SPI communication peripheral (prerequisite for SD card, OLED etc.)
 - I2C communication peripheral (for RTC)
 
 #### Components
