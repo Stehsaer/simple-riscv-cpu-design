@@ -827,6 +827,6 @@ module cpu_core (
     wire debug_rst = rst_i;
 
     assign mem2_id_wb_valid = mem2_product_ready ? mem1_mem2_mem_op[4:3] != MEM_OP_ST : 0;
-    assign mem2_id_wb_reg_feedback = mem2_product_ready && mem1_mem2_mem_op[4:3] != MEM_OP_ST ? mem1_mem2_wb_reg : 0;
+    assign mem2_id_wb_reg_feedback = mem1_mem2_valid && mem1_mem2_mem_op[4:3] != MEM_OP_ST ? mem1_mem2_wb_reg : 0;
 
 endmodule
