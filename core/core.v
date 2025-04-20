@@ -61,7 +61,7 @@ module cpu_core (
     input wire [1:0] data_rresp
 );
 
-    `include "./control-signals.vh"
+    `include "func/decode-signals.vh"
 
     /*========== Register File ==========*/
 
@@ -112,10 +112,10 @@ module cpu_core (
 
     /*========== BP ==========*/
 
-    localparam BP_STRONG_NOT_TAKEN = 2'b00;
-    localparam BP_WEAK_NOT_TAKEN = 2'b01;
-    localparam BP_WEAK_TAKEN = 2'b10;
-    localparam BP_STRONG_TAKEN = 2'b11;
+    `define BP_STRONG_NOT_TAKEN 2'b00
+    `define BP_WEAK_NOT_TAKEN 2'b01
+    `define BP_WEAK_TAKEN 2'b10
+    `define BP_STRONG_TAKEN 2'b11
 
     // Read
 
@@ -312,11 +312,11 @@ module cpu_core (
 
     /*========== IF ==========*/
 
-    reg [31:0] if_pc;  // 系统总PC，按字节编址
+    reg [31:0] if_pc;
     assign icache_pc_in = if_pc;
 
-    wire [31:0] if_pc_wdata;  // PC写入数值
-    wire if_pc_wen;  // PC写入使能
+    wire [31:0] if_pc_wdata;
+    wire if_pc_wen;
 
     // Counter == Strong Taken && Target Cache Hit
 
@@ -350,13 +350,18 @@ module cpu_core (
     wire [3:0] cache_inst_alu_op;
     wire [1:0] cache_inst_alu_section;
     wire [3:0] cache_inst_alu_num1_sel, cache_inst_alu_num2_sel;
+
     wire [ 1:0] cache_inst_wb_sel;
     wire [ 4:0] cache_inst_wb_reg;
     wire [31:1] cache_inst_wb_reg_onfly;
+
     wire cache_inst_rs1_req, cache_inst_rs2_req;
+
     wire cache_inst_pc_sel;
-    wire [4:0] cache_inst_cmp_op;
-    wire [4:0] cache_inst_mem_op;
+    wire [1:0] cache_inst_cmp_op;
+    wire [2:0] cache_inst_cmp_funct;
+    wire [1:0] cache_inst_mem_op;
+    wire [2:0] cache_inst_mem_funct;
     wire cache_inst_bp_enabled;
     wire cache_inst_fencei;
 
@@ -378,7 +383,9 @@ module cpu_core (
 
         .pc_sel_o(cache_inst_pc_sel),
         .cmp_op_o(cache_inst_cmp_op),
+        .cmp_funct_o(cache_inst_cmp_funct),
         .mem_op_o(cache_inst_mem_op),
+        .mem_funct_o(cache_inst_mem_funct),
         .bp_enabled_o(cache_inst_bp_enabled),
         .fencei_o(cache_inst_fencei)
     );
@@ -386,16 +393,22 @@ module cpu_core (
     /*========== ID ==========*/
 
     reg [31:0] cache_id_inst, cache_id_pc;
+
     reg [3:0] cache_id_alu_op;
     reg [1:0] cache_id_alu_section;
     reg [3:0] cache_id_alu_num1_sel, cache_id_alu_num2_sel;
+
     reg [ 1:0] cache_id_wb_sel;
     reg [ 4:0] cache_id_wb_reg;
     reg [31:1] cache_id_wb_reg_onfly;
+
     reg cache_id_rs1_req, cache_id_rs2_req;
+
     reg cache_id_pc_sel;
-    reg [4:0] cache_id_cmp_op;
-    reg [4:0] cache_id_mem_op;
+    reg [1:0] cache_id_cmp_op;
+    reg [2:0] cache_id_cmp_funct;
+    reg [1:0] cache_id_mem_op;
+    reg [2:0] cache_id_mem_funct;
     reg cache_id_bp_enabled;
     reg [30:0] cache_id_bp_target;
     reg cache_id_fencei;
@@ -416,7 +429,9 @@ module cpu_core (
             cache_id_rs2_req      <= 0;
             cache_id_pc_sel       <= 0;
             cache_id_cmp_op       <= 0;
+            cache_id_cmp_funct    <= 0;
             cache_id_mem_op       <= 0;
+            cache_id_mem_funct    <= 0;
             cache_id_bp_enabled   <= 0;
             cache_id_bp_target    <= 0;
             cache_id_fencei       <= 0;
@@ -441,7 +456,9 @@ module cpu_core (
                 cache_id_rs2_req      <= cache_inst_rs2_req;
                 cache_id_pc_sel       <= cache_inst_pc_sel;
                 cache_id_cmp_op       <= cache_inst_cmp_op;
+                cache_id_cmp_funct    <= cache_inst_cmp_funct;
                 cache_id_mem_op       <= cache_inst_mem_op;
+                cache_id_mem_funct    <= cache_inst_mem_funct;
                 cache_id_bp_enabled   <= cache_inst_bp_enabled;
                 cache_id_bp_target    <= icache_branch_target_out;
                 cache_id_fencei       <= cache_inst_fencei;
@@ -459,38 +476,38 @@ module cpu_core (
 
     // Bypass Pipe
 
-    reg [31:0] ex_id_result_feedback, mem1_id_result_feedback, mem2_id_result_feedback;
-    wire [4:0] ex_id_wb_reg_feedback, mem1_id_wb_reg_feedback, mem2_id_wb_reg_feedback;
+    reg [31:0] ex_modify_data, mem1_modify_data, mem2_modify_data;
+    wire [4:0] ex_modify_reg_feedback, mem1_modify_reg_feedback, mem2_modify_reg_feedback;
 
-    wire ex_id_wb_valid, mem1_id_wb_valid, mem2_id_wb_valid;
+    wire ex_modify_data_valid, mem1_modify_data_valid, mem2_modify_data_valid;
 
     inst_decode_v2_stage2 u_inst_decode_v2_stage2 (
-        .inst_i            (cache_id_inst),
-        .pc_i              (cache_id_pc),
-        .reg_raddr1        (reg_file_raddr1),
-        .reg_raddr2        (reg_file_raddr2),
-        .reg_rdata1        (reg_file_rdata1),
-        .reg_rdata2        (reg_file_rdata2),
-        .rs1_req_i         (cache_id_rs1_req),
-        .rs2_req_i         (cache_id_rs2_req),
-        .alu_num1_sel_i    (cache_id_alu_num1_sel),
-        .alu_num2_sel_i    (cache_id_alu_num2_sel),
-        .wb_reg_onfly_i    (wb_reg_onfly),
-        .ex_id_wb_reg_i    (ex_id_wb_reg_feedback),
-        .ex_id_wb_data_i   (ex_id_result_feedback),
-        .ex_id_wb_valid_i  (ex_id_wb_valid),
-        .mem1_id_wb_reg_i  (mem1_id_wb_reg_feedback),
-        .mem1_id_wb_data_i (mem1_id_result_feedback),
-        .mem1_id_wb_valid_i(mem1_id_wb_valid),
-        .mem2_id_wb_reg_i  (mem2_id_wb_reg_feedback),
-        .mem2_id_wb_data_i (mem2_id_result_feedback),
-        .mem2_id_wb_valid_i(mem2_id_wb_valid),
-        .alu_num1_o        (id_alu_num1),
-        .alu_num2_o        (id_alu_num2),
-        .cmp_num1_o        (id_cmp_num1),
-        .cmp_num2_o        (id_cmp_num2),
-        .mem_wdata_o       (id_mem_wdata),
-        .stall_o           (id_unavailable)
+        .inst_i                  (cache_id_inst),
+        .pc_i                    (cache_id_pc),
+        .reg_raddr1              (reg_file_raddr1),
+        .reg_raddr2              (reg_file_raddr2),
+        .reg_rdata1              (reg_file_rdata1),
+        .reg_rdata2              (reg_file_rdata2),
+        .rs1_req_i               (cache_id_rs1_req),
+        .rs2_req_i               (cache_id_rs2_req),
+        .alu_num1_sel_i          (cache_id_alu_num1_sel),
+        .alu_num2_sel_i          (cache_id_alu_num2_sel),
+        .wb_reg_onfly_i          (wb_reg_onfly),
+        .ex_modify_reg_i         (ex_modify_reg_feedback),
+        .ex_modify_data_i        (ex_modify_data),
+        .ex_modify_data_valid_i  (ex_modify_data_valid),
+        .mem1_modify_reg_i       (mem1_modify_reg_feedback),
+        .mem1_modify_data_i      (mem1_modify_data),
+        .mem1_modify_data_valid_i(mem1_modify_data_valid),
+        .mem2_modify_reg_i       (mem2_modify_reg_feedback),
+        .mem2_modify_data_i      (mem2_modify_data),
+        .mem2_modify_data_valid_i(mem2_modify_data_valid),
+        .alu_num1_o              (id_alu_num1),
+        .alu_num2_o              (id_alu_num2),
+        .cmp_num1_o              (id_cmp_num1),
+        .cmp_num2_o              (id_cmp_num2),
+        .mem_wdata_o             (id_mem_wdata),
+        .stall_o                 (id_unavailable)
     );
 
 
@@ -509,8 +526,10 @@ module cpu_core (
     reg [31:1] id_ex_wb_reg_onfly;
 
     reg id_ex_pc_sel;
-    reg [4:0] id_ex_cmp_op;
-    reg [4:0] id_ex_mem_op;
+    reg [1:0] id_ex_cmp_op;
+    reg [2:0] id_ex_cmp_funct;
+    reg [1:0] id_ex_mem_op;
+    reg [2:0] id_ex_mem_funct;
 
     reg [31:0] id_ex_cmp_num1, id_ex_cmp_num2;
     reg [31:0] id_ex_mem_wdata;
@@ -535,15 +554,15 @@ module cpu_core (
             id_ex_wb_reg_onfly <= 0;
             id_ex_pc_sel       <= 0;
             id_ex_cmp_op       <= 0;
+            id_ex_cmp_funct    <= 0;
             id_ex_mem_op       <= 0;
+            id_ex_mem_funct    <= 0;
             id_ex_cmp_num1     <= 0;
             id_ex_cmp_num2     <= 0;
             id_ex_mem_wdata    <= 0;
             id_ex_pc           <= 0;
             id_ex_fencei       <= 0;
-
             id_ex_inst         <= 0;
-
             id_ex_valid        <= 0;
         end else if (flush) begin
             id_ex_valid <= 0;
@@ -560,7 +579,9 @@ module cpu_core (
                 id_ex_wb_reg_onfly <= cache_id_wb_reg_onfly;
                 id_ex_pc_sel       <= cache_id_pc_sel;
                 id_ex_cmp_op       <= cache_id_cmp_op;
+                id_ex_cmp_funct    <= cache_id_cmp_funct;
                 id_ex_mem_op       <= cache_id_mem_op;
+                id_ex_mem_funct    <= cache_id_mem_funct;
                 id_ex_cmp_num1     <= id_cmp_num1;
                 id_ex_cmp_num2     <= id_cmp_num2;
                 id_ex_mem_wdata    <= id_mem_wdata;
@@ -580,15 +601,14 @@ module cpu_core (
 
     always @(*) begin
         case (id_ex_wb_sel)
-            0: ex_id_result_feedback = ex_alu_result;
-            1: ex_id_result_feedback = id_ex_pc + 4;
-            2: ex_id_result_feedback = 0;
-            3: ex_id_result_feedback = 0;
+            `WB_ALU: ex_modify_data = ex_alu_result;
+            `WB_PC_NEXT: ex_modify_data = id_ex_pc + 4;
+            `WB_MEM, `WB_NONE: ex_modify_data = 0;
         endcase
     end
 
-    assign ex_id_wb_valid = id_ex_valid && id_ex_mem_op == MEM_OP_NONE;
-    assign ex_id_wb_reg_feedback = id_ex_valid && id_ex_mem_op[4:3] != MEM_OP_ST ? id_ex_wb_reg : 0;
+    assign ex_modify_data_valid   = id_ex_valid && id_ex_mem_op == `MEM_OP_NONE;
+    assign ex_modify_reg_feedback = id_ex_valid && id_ex_mem_op != `MEM_OP_ST ? id_ex_wb_reg : 0;
 
     reg  ex_fencei_inprogress;
 
@@ -605,10 +625,11 @@ module cpu_core (
 
     wire alu_busy;
 
-    assign ex_ready_go = 
-		id_ex_mem_op[4:3] == MEM_OP_NONE 
-		? !alu_busy && (ex_fencei_inprogress ? dcache_flush_done : !id_ex_fencei)
-		: ((id_ex_mem_op[4:3] == MEM_OP_LD || id_ex_mem_op[4:3] == MEM_OP_ST) ? !dcache_busy && id_ex_valid : 1);
+    assign ex_ready_go = id_ex_mem_op ==
+        `MEM_OP_NONE
+        ? !alu_busy && (ex_fencei_inprogress ? dcache_flush_done : !id_ex_fencei) :
+            ((id_ex_mem_op == `MEM_OP_LD || id_ex_mem_op == `MEM_OP_ST) ?
+             !dcache_busy && id_ex_valid : 1);
 
     alu alu_module (
         .clk_i(clk_i),
@@ -631,10 +652,13 @@ module cpu_core (
     wire ex_ram_rd_ready;
 
     memory_stage1 memory_module1 (
+        // Input
         .mem_op_i(id_ex_mem_op),
+        .mem_funct_i(id_ex_mem_funct),
         .mem_addr_i(ex_alu_add_result),
         .mem_wdata_i(id_ex_mem_wdata),
 
+        // Output
         .ram_addr_o (ex_ram_addr),
         .ram_wdata_o(ex_ram_wdata),
         .ram_wen_o  (ex_ram_wr_byte),
@@ -645,13 +669,14 @@ module cpu_core (
     assign dcache_din   = ex_ram_wdata;
     assign dcache_wmask = ex_ram_wr_byte;
 
-    assign dcache_wen   = id_ex_valid && id_ex_mem_op[4:3] == 2'b10 && ex_ram_wr_byte != 0;
-    assign dcache_ren   = id_ex_valid && id_ex_mem_op[4:3] == 2'b01;
+    assign dcache_wen   = id_ex_valid && id_ex_mem_op == `MEM_OP_ST && ex_ram_wr_byte != 0;
+    assign dcache_ren   = id_ex_valid && id_ex_mem_op == `MEM_OP_LD;
 
     // Branch
 
     branch branch_module (
         .cmp_op_i(id_ex_cmp_op),
+        .cmp_funct_i(id_ex_cmp_funct),
         .cmp_num1_i(id_ex_cmp_num1),
         .cmp_num2_i(id_ex_cmp_num2),
         .do_branch_o(ex_do_branch)
@@ -700,12 +725,12 @@ module cpu_core (
 
     always @(*) begin
         case (bp_counter_rwdata)
-            BP_STRONG_NOT_TAKEN:
-            bp_counter_wdata = bp_do_branch ? BP_WEAK_NOT_TAKEN : BP_STRONG_NOT_TAKEN;
-            BP_WEAK_NOT_TAKEN:
-            bp_counter_wdata = bp_do_branch ? BP_WEAK_TAKEN : BP_STRONG_NOT_TAKEN;
-            BP_WEAK_TAKEN: bp_counter_wdata = bp_do_branch ? BP_STRONG_TAKEN : BP_WEAK_NOT_TAKEN;
-            BP_STRONG_TAKEN: bp_counter_wdata = bp_do_branch ? BP_STRONG_TAKEN : BP_WEAK_TAKEN;
+            `BP_STRONG_NOT_TAKEN:
+            bp_counter_wdata = bp_do_branch ? `BP_WEAK_NOT_TAKEN : `BP_STRONG_NOT_TAKEN;
+            `BP_WEAK_NOT_TAKEN:
+            bp_counter_wdata = bp_do_branch ? `BP_WEAK_TAKEN : `BP_STRONG_NOT_TAKEN;
+            `BP_WEAK_TAKEN: bp_counter_wdata = bp_do_branch ? `BP_STRONG_TAKEN : `BP_WEAK_NOT_TAKEN;
+            `BP_STRONG_TAKEN: bp_counter_wdata = bp_do_branch ? `BP_STRONG_TAKEN : `BP_WEAK_TAKEN;
         endcase
     end
 
@@ -713,7 +738,8 @@ module cpu_core (
 
     reg [1:0] ex_mem1_wb_sel;
     reg [31:0] ex_mem1_alu_result, ex_mem1_pc4;
-    reg [ 4:0] ex_mem1_mem_op;
+    reg [ 1:0] ex_mem1_mem_op;
+    reg [ 2:0] ex_mem1_mem_funct;
     reg [ 4:0] ex_mem1_wb_reg;
     reg [31:1] ex_mem1_wb_reg_onfly;
 
@@ -722,6 +748,7 @@ module cpu_core (
             ex_mem1_alu_result   <= 0;
             ex_mem1_pc4          <= 0;
             ex_mem1_mem_op       <= 0;
+            ex_mem1_mem_funct    <= 0;
             ex_mem1_wb_reg       <= 0;
             ex_mem1_wb_sel       <= 0;
             ex_mem1_wb_reg_onfly <= 0;
@@ -732,6 +759,7 @@ module cpu_core (
                 ex_mem1_alu_result   <= ex_alu_result;
                 ex_mem1_pc4          <= id_ex_pc + 4;
                 ex_mem1_mem_op       <= id_ex_mem_op;
+                ex_mem1_mem_funct    <= id_ex_mem_funct;
                 ex_mem1_wb_reg       <= id_ex_wb_reg;
                 ex_mem1_wb_sel       <= id_ex_wb_sel;
                 ex_mem1_wb_reg_onfly <= id_ex_wb_reg_onfly;
@@ -744,19 +772,20 @@ module cpu_core (
 
     always @(*) begin
         case (ex_mem1_wb_sel)
-            0: mem1_id_result_feedback <= ex_mem1_alu_result;
-            1: mem1_id_result_feedback <= ex_mem1_pc4;
-            default: mem1_id_result_feedback <= 0;
+            `WB_ALU: mem1_modify_data <= ex_mem1_alu_result;
+            `WB_PC_NEXT: mem1_modify_data <= ex_mem1_pc4;
+            `WB_MEM, `WB_NONE: mem1_modify_data <= 0;
         endcase
     end
 
-    assign mem1_id_wb_valid = ex_mem1_valid && ex_mem1_mem_op == MEM_OP_NONE;
-    assign mem1_id_wb_reg_feedback = ex_mem1_valid && ex_mem1_mem_op[4:3] != MEM_OP_ST ? ex_mem1_wb_reg : 0;
+    assign mem1_modify_data_valid = ex_mem1_valid && ex_mem1_mem_op == `MEM_OP_NONE;
+    assign mem1_modify_reg_feedback = ex_mem1_valid && ex_mem1_mem_op != `MEM_OP_ST ? ex_mem1_wb_reg : 0;
 
     /*========== MEM2 ==========*/
 
     reg [ 4:0] mem1_mem2_wb_reg;
-    reg [ 4:0] mem1_mem2_mem_op;
+    reg [ 1:0] mem1_mem2_mem_op;
+    reg [ 2:0] mem1_mem2_mem_funct;
     reg [31:0] mem1_mem2_alu_result;
     reg [31:0] mem1_mem2_pc4;
     reg [ 1:0] mem1_mem2_wb_sel;
@@ -766,6 +795,7 @@ module cpu_core (
         if (rst_i) begin
             mem1_mem2_wb_reg       <= 0;
             mem1_mem2_mem_op       <= 0;
+            mem1_mem2_mem_funct    <= 0;
             mem1_mem2_alu_result   <= 0;
             mem1_mem2_pc4          <= 0;
             mem1_mem2_wb_sel       <= 0;
@@ -776,6 +806,7 @@ module cpu_core (
             if (mem1_product_ready) begin
                 mem1_mem2_wb_reg       <= ex_mem1_wb_reg;
                 mem1_mem2_mem_op       <= ex_mem1_mem_op;
+                mem1_mem2_mem_funct    <= ex_mem1_mem_funct;
                 mem1_mem2_alu_result   <= ex_mem1_alu_result;
                 mem1_mem2_pc4          <= ex_mem1_pc4;
                 mem1_mem2_wb_sel       <= ex_mem1_wb_sel;
@@ -784,7 +815,7 @@ module cpu_core (
         end
     end
 
-    assign mem2_ready_go = mem1_mem2_mem_op[4:3] == MEM_OP_LD ? dcache_rresp && mem1_mem2_valid : 1;
+    assign mem2_ready_go = mem1_mem2_mem_op == `MEM_OP_LD ? dcache_rresp && mem1_mem2_valid : 1;
 
     wire [31:0] mem2_ram_rdata;
     reg [31:0] mem2_reg_wdata;
@@ -793,13 +824,13 @@ module cpu_core (
 
     always @(*) begin
         case (mem1_mem2_wb_sel)
-            0: mem2_reg_wdata = mem1_mem2_alu_result;
-            1: mem2_reg_wdata = mem1_mem2_pc4;
-            2: mem2_reg_wdata = mem2_ram_rdata;
-            3: mem2_reg_wdata = 0;
+            `WB_ALU: mem2_reg_wdata = mem1_mem2_alu_result;
+            `WB_PC_NEXT: mem2_reg_wdata = mem1_mem2_pc4;
+            `WB_MEM: mem2_reg_wdata = mem2_ram_rdata;
+            `WB_NONE: mem2_reg_wdata = 0;
         endcase
 
-        mem2_reg_wen   = mem2_product_ready && mem1_mem2_wb_sel != WB_NONE;
+        mem2_reg_wen   = mem2_product_ready && mem1_mem2_wb_sel != `WB_NONE;
         mem2_reg_waddr = mem1_mem2_wb_reg;
     end
 
@@ -808,10 +839,13 @@ module cpu_core (
     assign reg_file_wdata = mem2_reg_wdata;
 
     memory_stage2 memory_module2 (
-        .mem_op_i  (mem1_mem2_mem_op),
+        // Input
+        .mem_op_i(mem1_mem2_mem_op),
+        .mem_funct_i(mem1_mem2_mem_funct),
         .mem_addr_i(mem1_mem2_alu_result),
         .ram_data_i(dcache_dout),
 
+        // Output
         .mem_rdata_o(mem2_ram_rdata)
     );
 
@@ -820,13 +854,13 @@ module cpu_core (
         | (mem1_mem2_valid ? mem1_mem2_wb_reg_onfly : 0);
 
     always @(*) begin
-        mem2_id_result_feedback = mem2_reg_wdata;
+        mem2_modify_data = mem2_reg_wdata;
     end
 
     wire [31:0] debug_pc = mem1_mem2_pc4 - 4;
     wire debug_rst = rst_i;
 
-    assign mem2_id_wb_valid = mem2_product_ready ? mem1_mem2_mem_op[4:3] != MEM_OP_ST : 0;
-    assign mem2_id_wb_reg_feedback = mem1_mem2_valid && mem1_mem2_mem_op[4:3] != MEM_OP_ST ? mem1_mem2_wb_reg : 0;
+    assign mem2_modify_data_valid = mem2_product_ready ? mem1_mem2_mem_op != `MEM_OP_ST : 0;
+    assign mem2_modify_reg_feedback = mem1_mem2_valid && mem1_mem2_mem_op != `MEM_OP_ST ? mem1_mem2_wb_reg : 0;
 
 endmodule

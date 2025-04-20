@@ -6,32 +6,32 @@ module alu_integer (
     output wire [31:0] add
 );
 
-    localparam OP_ADD = 4'b0000;
-    localparam OP_SUB = 4'b1000;
-    localparam OP_SLL = 4'b0001;
-    localparam OP_SLT = 4'b0010;
-    localparam OP_SLTU = 4'b0011;
-    localparam OP_XOR = 4'b0100;
-    localparam OP_SRL = 4'b0101;
-    localparam OP_SRA = 4'b1101;
-    localparam OP_OR = 4'b0110;
-    localparam OP_AND = 4'b0111;
+    `define OP_ADD 4'b0000
+    `define OP_SUB 4'b1000
+    `define OP_SLL 4'b0001
+    `define OP_SLT 4'b0010
+    `define OP_SLTU 4'b0011
+    `define OP_XOR 4'b0100
+    `define OP_SRL 4'b0101
+    `define OP_SRA 4'b1101
+    `define OP_OR 4'b0110
+    `define OP_AND 4'b0111
 
     assign add = num1 + num2;
 
     always @(*)
         case (op)
-            OP_ADD:  result = add;
-            OP_SUB:  result = num1 - num2;
-            OP_SLL:  result = num1 << num2;
-            OP_SLT:  result = $signed(num1) < $signed(num2);
-            OP_SLTU: result = num1 < num2;
-            OP_XOR:  result = num1 ^ num2;
-            OP_SRL:  result = num1 >> $signed(num2);
-            OP_SRA:  result = $signed(num1) >>> $signed(num2);
-            OP_OR:   result = num1 | num2;
-            OP_AND:  result = num1 & num2;
-            default: result = 0;
+            `OP_ADD:  result = add;
+            `OP_SUB:  result = num1 - num2;
+            `OP_SLL:  result = num1 << num2;
+            `OP_SLT:  result = $signed(num1) < $signed(num2);
+            `OP_SLTU: result = num1 < num2;
+            `OP_XOR:  result = num1 ^ num2;
+            `OP_SRL:  result = num1 >> $signed(num2);
+            `OP_SRA:  result = $signed(num1) >>> $signed(num2);
+            `OP_OR:   result = num1 | num2;
+            `OP_AND:  result = num1 & num2;
+            default:  result = 0;
         endcase
 
 endmodule
@@ -48,22 +48,22 @@ module alu_muldiv (
     output reg busy
 );
 
-    localparam OP_MUL = 3'b000;
-    localparam OP_MULH = 3'b001;
-    localparam OP_MULHSU = 3'b010;
-    localparam OP_MULHU = 3'b011;
-    localparam OP_DIV = 3'b100;
-    localparam OP_DIVU = 3'b101;
-    localparam OP_REM = 3'b110;
-    localparam OP_REMU = 3'b111;
+    `define OP_MUL 3'b000
+    `define OP_MULH 3'b001
+    `define OP_MULHSU 3'b010
+    `define OP_MULHU 3'b011
+    `define OP_DIV 3'b100
+    `define OP_DIVU 3'b101
+    `define OP_REM 3'b110
+    `define OP_REMU 3'b111
 
-    localparam STATE_IDLE = 0;
-    localparam STATE_MUL_CLK1 = 1;
-    localparam STATE_MUL_CLK2 = 2;
-    localparam STATE_MUL_CLK3 = 3;
-    localparam STATE_MUL_CLK4 = 4;
-    localparam STATE_MUL_FINISH = 5;
-    localparam STATE_DIV_WAIT = 6;
+    `define STATE_IDLE 0
+    `define STATE_MUL_CLK1 1
+    `define STATE_MUL_CLK2 2
+    `define STATE_MUL_CLK3 3
+    `define STATE_MUL_CLK4 4
+    `define STATE_MUL_FINISH 5
+    `define STATE_DIV_WAIT 6
 
     // ===== MODULES =====
 
@@ -122,17 +122,17 @@ module alu_muldiv (
     always @(*) begin
         case (op)
 
-            OP_MUL, OP_MULH, OP_DIV, OP_REM: begin
+            `OP_MUL, `OP_MULH, `OP_DIV, `OP_REM: begin
                 num1_signed = 1;
                 num2_signed = 1;
             end
 
-            OP_MULHSU: begin
+            `OP_MULHSU: begin
                 num1_signed = 1;
                 num2_signed = 0;
             end
 
-            OP_MULHU, OP_DIVU, OP_REMU: begin
+            `OP_MULHU, `OP_DIVU, `OP_REMU: begin
                 num1_signed = 0;
                 num2_signed = 0;
             end
@@ -146,32 +146,32 @@ module alu_muldiv (
     reg [2:0] state;
 
     wire op_is_division = op[2] == 1;
-    assign div_tx_valid = input_valid && state != STATE_DIV_WAIT && op_is_division;
+    assign div_tx_valid = input_valid && state != `STATE_DIV_WAIT && op_is_division;
 
     always @(posedge clk)
-        if (rst) state <= STATE_IDLE;
+        if (rst) state <= `STATE_IDLE;
         else
             case (state)
-                STATE_IDLE:
-                if (input_valid) state <= op_is_division ? STATE_DIV_WAIT : STATE_MUL_CLK1;
+                `STATE_IDLE:
+                if (input_valid) state <= op_is_division ? `STATE_DIV_WAIT : `STATE_MUL_CLK1;
 
-                STATE_MUL_CLK1:   state <= STATE_MUL_CLK2;
-                STATE_MUL_CLK2:   state <= STATE_MUL_CLK3;
-                STATE_MUL_CLK3:   state <= STATE_MUL_CLK4;
-                STATE_MUL_CLK4:   state <= STATE_MUL_FINISH;
-                STATE_MUL_FINISH: state <= STATE_IDLE;
+                `STATE_MUL_CLK1:   state <= `STATE_MUL_CLK2;
+                `STATE_MUL_CLK2:   state <= `STATE_MUL_CLK3;
+                `STATE_MUL_CLK3:   state <= `STATE_MUL_CLK4;
+                `STATE_MUL_CLK4:   state <= `STATE_MUL_FINISH;
+                `STATE_MUL_FINISH: state <= `STATE_IDLE;
 
-                STATE_DIV_WAIT: if (div_done) state <= STATE_IDLE;
+                `STATE_DIV_WAIT: if (div_done) state <= `STATE_IDLE;
 
-                default: state <= STATE_IDLE;
+                default: state <= `STATE_IDLE;
             endcase
 
     always @(*)
         case (state)
-            STATE_IDLE: busy = input_valid;
-            STATE_MUL_CLK1, STATE_MUL_CLK2, STATE_MUL_CLK3, STATE_MUL_CLK4: busy = 1;
-            STATE_MUL_FINISH: busy = 0;
-            STATE_DIV_WAIT: busy = !div_done;
+            `STATE_IDLE: busy = input_valid;
+            `STATE_MUL_CLK1, `STATE_MUL_CLK2, `STATE_MUL_CLK3, `STATE_MUL_CLK4: busy = 1;
+            `STATE_MUL_FINISH: busy = 0;
+            `STATE_DIV_WAIT: busy = !div_done;
             default: busy = 0;
         endcase
 
@@ -201,13 +201,13 @@ module alu_muldiv (
 
     always @(*)
         case (op)
-            OP_MUL: result = mul_result_signed[31:0];
+            `OP_MUL: result = mul_result_signed[31:0];
 
-            OP_MULH, OP_MULHU, OP_MULHSU: result = mul_result_signed[63:32];
+            `OP_MULH, `OP_MULHU, `OP_MULHSU: result = mul_result_signed[63:32];
 
-            OP_DIV, OP_DIVU: result = div_result_quotient;
+            `OP_DIV, `OP_DIVU: result = div_result_quotient;
 
-            OP_REM, OP_REMU: result = div_result_remainder;
+            `OP_REM, `OP_REMU: result = div_result_remainder;
         endcase
 
 endmodule
@@ -220,15 +220,15 @@ module alu_zicond (
     output reg [31:0] result
 );
 
-    localparam OP_CZERO_EQZ = 3'b101;
-    localparam OP_CZERO_NEZ = 3'b111;
+    `define OP_CZERO_EQZ 3'b101
+    `define OP_CZERO_NEZ 3'b111
 
     wire num2_eqz = num2 == 0;
 
     always @(*)
         case (op)
-            OP_CZERO_EQZ: result = num2_eqz ? 0 : num1;
-            OP_CZERO_NEZ: result = num2_eqz ? num1 : 0;
+            `OP_CZERO_EQZ: result = num2_eqz ? 0 : num1;
+            `OP_CZERO_NEZ: result = num2_eqz ? num1 : 0;
             default: result = 0;
         endcase
 
@@ -248,9 +248,9 @@ module alu (
 );
     /* PARAMETERS */
 
-    localparam ALU_SECTION_INTEGER = 2'b00;
-    localparam ALU_SECTION_MULDIV = 2'b01;
-    localparam ALU_SECTION_ZICOND = 2'b10;
+    `define ALU_SECTION_INTEGER 2'b00
+    `define ALU_SECTION_MULDIV 2'b01
+    `define ALU_SECTION_ZICOND 2'b10
 
     wire [31:0] integer_result, muldiv_result, zicond_result;
     wire muldiv_busy;
@@ -267,7 +267,7 @@ module alu (
         .clk(clk_i),
         .rst(rst_i),
         .op(alu_op_i[2:0]),
-        .input_valid(alu_valid_i && alu_section_i == ALU_SECTION_MULDIV),
+        .input_valid(alu_valid_i && alu_section_i == `ALU_SECTION_MULDIV),
         .num1(alu_num1_i),
         .num2(alu_num2_i),
         .result(muldiv_result),
@@ -285,9 +285,9 @@ module alu (
 
     always @(*)
         case (alu_section_i)
-            ALU_SECTION_INTEGER: alu_result_o = integer_result;
-            ALU_SECTION_MULDIV: alu_result_o = muldiv_result;
-            ALU_SECTION_ZICOND: alu_result_o = zicond_result;
+            `ALU_SECTION_INTEGER: alu_result_o = integer_result;
+            `ALU_SECTION_MULDIV: alu_result_o = muldiv_result;
+            `ALU_SECTION_ZICOND: alu_result_o = zicond_result;
             default: alu_result_o = 0;
         endcase
 
