@@ -12,6 +12,7 @@
 `define OP_LOAD 5'b00000
 `define OP_STORE 5'b01000
 `define OP_MISC_MEM 5'b00011
+`define OP_SYSTEM 5'b11100
 
 // Lower 3 bits of funct7 of ALU RTYPE
 `define FUNCT7_INTEGER 3'b000
@@ -40,3 +41,12 @@
 
 // Sync Funct3
 `define FUNCT3_ZICOND 3'b001
+
+// System Funct3
+`define FUNCT3_ECALL_EBREAK 3'b000
+`define FUNCT3_CSRRW 3'b001
+`define FUNCT3_CSRRS 3'b010
+`define FUNCT3_CSRRC 3'b011
+`define FUNCT3_CSRRWI 3'b101
+`define FUNCT3_CSRRSI 3'b110
+`define FUNCT3_CSRRCI 3'b111

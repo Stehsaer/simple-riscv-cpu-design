@@ -1,3 +1,5 @@
+`include "decode-signals.vh"
+
 module alu_integer (
     input  wire [ 3:0] op,
     input  wire [31:0] num1,
@@ -237,8 +239,8 @@ endmodule
 module alu (
     input wire clk_i,
     input wire rst_i,
-    input wire [3:0] alu_op_i,
-    input wire [1:0] alu_section_i,
+    input wire `ALU_OP_SIGWIDTH alu_op_i,
+    input wire `ALU_SECTION_SIGWIDTH alu_section_i,
     input wire [31:0] alu_num1_i,
     input wire [31:0] alu_num2_i,
     output reg [31:0] alu_result_o,

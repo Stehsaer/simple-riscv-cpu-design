@@ -11,13 +11,17 @@ module Data_cache_w32_addr32 (
     input wire [3:0] wmask,
 
     input wire ren,
-    output wire rresp,
     output wire [31:0] dout,
 
+    output wire resp,
+    input  wire have_trap_i,
+    output wire fetch_error_o,
     output wire busy,
 
     input  wire flush_en,
     output wire flush_done,
+
+    input wire wb_flush,  // flush signal from WB
 
     /* External AXI Signals: Cache <=> External AXI Device */
 
@@ -107,7 +111,7 @@ module Data_cache_w32_addr32 (
 
     /* PARAMETERS */
 
-    parameter PERIPHERAL_BASE_ADDRESS = 32'h0001_0000; // Default: Peripheral Address Starts at 0x1_0000
+    parameter PERIPHERAL_BASE_ADDRESS = 32'h0001_0000;  // Default: Peripheral Address Starts at 0x1_0000
     parameter PERIPHERAL_ADDRESS_BITS = 16;  // Default: 64KB Peripheral Address Space
 
     /* AXI FIXED LINES */
@@ -121,6 +125,8 @@ module Data_cache_w32_addr32 (
     assign m_axi_arlock  = 1'b0;
 
     /* PIPELINE SIGNALS */
+
+    reg fetch_error;
 
     // Data in interstage register is valid?
     reg query_process_valid, process_output_valid;
@@ -140,9 +146,9 @@ module Data_cache_w32_addr32 (
 
     // Stages accepts new data: stage doesn't hold valid data, or, next stage is ready to accept data and current stage has valid product
     assign process_output_accept_ready = !process_output_valid || output_external_accept_ready;
-    assign query_process_accept_ready = !query_process_valid || process_product_ready && process_output_accept_ready;
+    assign query_process_accept_ready  = !query_process_valid || process_product_ready && process_output_accept_ready;
 
-    assign busy = !query_process_accept_ready;
+    assign busy                        = !query_process_accept_ready;
 
     /* FUNCTIONS */
 
@@ -163,8 +169,7 @@ module Data_cache_w32_addr32 (
     always @(posedge clk) begin
         if (rst) begin
 
-            for (valid_lutram_i = 0; valid_lutram_i < 32; valid_lutram_i = valid_lutram_i + 1)
-            valid_storage_lutram[valid_lutram_i] <= 4'h0;
+            for (valid_lutram_i = 0; valid_lutram_i < 32; valid_lutram_i = valid_lutram_i + 1) valid_storage_lutram[valid_lutram_i] <= 4'h0;
 
             valid_storage_dout <= 4'h0;
 
@@ -208,8 +213,7 @@ module Data_cache_w32_addr32 (
     always @(posedge clk) begin
         if (rst) begin
 
-            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1)
-            tag_storage_lutram[tag_lutram_i] <= 102'b0;
+            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1) tag_storage_lutram[tag_lutram_i] <= 102'b0;
 
             tag_storage_dout <= 102'b0;
 
@@ -599,24 +603,26 @@ module Data_cache_w32_addr32 (
     reg [3:0] query_process_wmask;
     reg query_process_rreq, query_process_wreq, query_process_flushreq;
 
+    // re-staged optimization
+    reg query_process_is_periph;
+    reg query_process_normal_access;  // !flush && (read | write)
+
     always @(posedge clk) begin
-        if (rst) begin
-            query_process_valid    <= 0;
-            query_process_addr     <= 0;
-            query_process_rreq     <= 0;
-            query_process_wreq     <= 0;
-            query_process_wdata    <= 0;
-            query_process_wmask    <= 0;
-            query_process_flushreq <= 0;
+        if (rst || wb_flush) begin
+            query_process_valid <= 0;
         end else if (query_process_accept_ready) begin
             query_process_valid <= input_query_valid;
             if (query_product_ready) begin
-                query_process_addr     <= input_query_addr;
-                query_process_rreq     <= input_query_rreq;
-                query_process_wreq     <= input_query_wreq;
-                query_process_wdata    <= input_query_wdata;
-                query_process_wmask    <= input_query_wmask;
-                query_process_flushreq <= input_query_flushreq;
+
+                query_process_is_periph     <= input_query_addr[31:PERIPHERAL_ADDRESS_BITS] == PERIPHERAL_BASE_ADDRESS[31:PERIPHERAL_ADDRESS_BITS];
+                query_process_normal_access <= !input_query_flushreq && (input_query_rreq || input_query_wreq);
+
+                query_process_addr          <= input_query_addr;
+                query_process_rreq          <= input_query_rreq;
+                query_process_wreq          <= input_query_wreq;
+                query_process_wdata         <= input_query_wdata;
+                query_process_wmask         <= input_query_wmask;
+                query_process_flushreq      <= input_query_flushreq;
             end
         end
     end
@@ -661,7 +667,7 @@ module Data_cache_w32_addr32 (
             default: process_hit_set = 2'b00;
         endcase
 
-    wire process_is_periph = query_process_addr[31:PERIPHERAL_ADDRESS_BITS] == PERIPHERAL_BASE_ADDRESS[31:PERIPHERAL_ADDRESS_BITS];
+    wire process_is_periph = query_process_is_periph;
 
     wire process_cache_hit_not_periph;
 
@@ -680,32 +686,31 @@ module Data_cache_w32_addr32 (
         for (i = 0; i < 4; i = i + 1) begin
             Lru_update process_cache_hit_lru_matrix_update (
                 .original(process_queried_lru_matrix),
-                .set(i),
-                .updated(process_cache_hit_updated_lru_matrix_list[i])
+                .set     (i),
+                .updated (process_cache_hit_updated_lru_matrix_list[i])
             );
             Lru_find_set lru_matrix_parser (
                 .lru_matrix(process_cache_hit_updated_lru_matrix_list[i]),
-                .set(process_cache_hit_parsed_lru_set[i])
+                .set       (process_cache_hit_parsed_lru_set[i])
             );
         end
     endgenerate
 
     Lru_update process_cache_not_hit_lru_matrix_update (
         .original(process_queried_lru_matrix),
-        .set(process_lru_selected_set),
-        .updated(process_cache_not_hit_updated_lru_matrix)
+        .set     (process_lru_selected_set),
+        .updated (process_cache_not_hit_updated_lru_matrix)
     );
 
     Lru_find_set lru_matrix_parser (
         .lru_matrix(process_cache_not_hit_updated_lru_matrix),
-        .set(process_cache_not_hit_parsed_lru_set)
+        .set       (process_cache_not_hit_parsed_lru_set)
     );
 
     reg [1:0] process_next_lru_selected_set;
 
     always @(*) begin
-        if (process_cache_hit)
-            process_next_lru_selected_set = process_cache_hit_parsed_lru_set[process_hit_set];
+        if (process_cache_hit) process_next_lru_selected_set = process_cache_hit_parsed_lru_set[process_hit_set];
         else process_next_lru_selected_set = process_cache_not_hit_parsed_lru_set;
     end
 
@@ -814,12 +819,7 @@ module Data_cache_w32_addr32 (
             end
 
             // Flush
-            `STATE_FLUSH_READ_TAG, 
-            `STATE_FLUSH_COMPARE_TAG, 
-            `STATE_FLUSH_SEND_ADDRESS, 
-            `STATE_FLUSH_SEND_DATA, 
-            `STATE_FLUSH_RECEIVE_RESPONSE:
-            begin
+            `STATE_FLUSH_READ_TAG, `STATE_FLUSH_COMPARE_TAG, `STATE_FLUSH_SEND_ADDRESS, `STATE_FLUSH_SEND_DATA, `STATE_FLUSH_RECEIVE_RESPONSE: begin
                 axi_channel_state           = `CHANNEL_FLUSH;
                 storage_read_channel_state  = `CHANNEL_FLUSH;
                 storage_write_channel_state = `CHANNEL_FLUSH;
@@ -851,11 +851,9 @@ module Data_cache_w32_addr32 (
             case (process_state)
 
                 `STATE_NORMAL: begin
-                    if (query_process_valid)
-                        if (query_process_flushreq)
-                            process_state <= `STATE_FLUSH_READ_TAG;  // Goto flush state
+                    if (query_process_valid && !wb_flush && !have_trap_i)
+                        if (query_process_flushreq) process_state <= `STATE_FLUSH_READ_TAG;  // Goto flush state
                         else if (query_process_rreq | query_process_wreq) begin
-
                             if (process_is_periph) begin
                                 if (query_process_wreq) begin
                                     process_state <= `STATE_PERIPH_WRITE_SEND_ADDRESS;
@@ -865,7 +863,7 @@ module Data_cache_w32_addr32 (
                             end else if (!process_cache_hit) begin
                                 replace_counter <= 0;
 
-                                if (process_queried_dirty[process_lru_selected_set] && process_queried_valid[process_lru_selected_set]) begin // Nees writeback
+                                if (process_queried_dirty[process_lru_selected_set] && process_queried_valid[process_lru_selected_set]) begin  // Nees writeback
                                     process_state <= `STATE_REPLACE_WRITEBACK_SEND_ADDRESS;
                                 end else begin
                                     process_state <= `STATE_REPLACE_READIN_SEND_ADDRESS;
@@ -1021,15 +1019,16 @@ module Data_cache_w32_addr32 (
 
     assign process_cache_hit_not_periph = 
         process_state == `STATE_NORMAL && 
-        !query_process_flushreq && 
-        (query_process_rreq | query_process_wreq) && 
+        query_process_normal_access && 
         process_cache_hit && 
-        !process_is_periph;
+        !process_is_periph && 
+        !wb_flush && 
+        query_process_valid;
 
     assign valid_storage_wen_channel_normal = 0;  // Dont need to writein valid when hit
     assign valid_storage_din_channel_normal = 0;
 
-    assign tag_storage_wen_channel_normal = process_cache_hit_not_periph && query_process_wreq;  // Writein tag when hit and write requested (modify dirty bit)
+    assign tag_storage_wen_channel_normal = process_cache_hit_not_periph && query_process_wreq && !have_trap_i;  // Writein tag when hit and write requested (modify dirty bit)
     assign tag_storage_waddr_channel_normal = process_index;
     assign tag_storage_wdata_channel_normal = {
         process_next_lru_selected_set,
@@ -1041,13 +1040,9 @@ module Data_cache_w32_addr32 (
         process_queried_tag_set0
     };
 
-    assign data_storage_waddr_channel_normal = {
-        process_index, process_hit_set, process_subline_index
-    };
-    assign data_storage_wen_channel_normal = process_cache_hit_not_periph && query_process_wreq;
-    assign data_storage_raddr_channel_normal = {
-        process_index, process_hit_set, process_subline_index
-    };
+    assign data_storage_waddr_channel_normal = {process_index, process_hit_set, process_subline_index};
+    assign data_storage_wen_channel_normal = process_cache_hit_not_periph && query_process_wreq && !have_trap_i;
+    assign data_storage_raddr_channel_normal = {process_index, process_hit_set, process_subline_index};
     assign data_storage_ren_channel_normal = query_process_rreq && process_output_accept_ready && process_product_ready;
 
     assign data_storage_wdata_channel_normal = {4{query_process_wdata}};
@@ -1060,34 +1055,40 @@ module Data_cache_w32_addr32 (
             3: data_storage_wmask_channel_normal = {query_process_wmask, 12'b0};
         endcase
 
-    assign awvalid_channel_normal = 1'b0;
-    assign awaddr_channel_normal = 32'b0;
-    assign awlen_channel_normal = 8'b0;
-    assign awcache_channel_normal = 4'b0;
-    assign awsize_channel_normal = 2;  // Left default at 32-bit
+    assign awvalid_channel_normal             = 1'b0;
+    assign awaddr_channel_normal              = 32'b0;
+    assign awlen_channel_normal               = 8'b0;
+    assign awcache_channel_normal             = 4'b0;
+    assign awsize_channel_normal              = 2;  // Left default at 32-bit
 
-    assign wvalid_channel_normal = 1'b0;
-    assign wlast_channel_normal = 1'b0;
-    assign wdata_channel_normal = 32'b0;
-    assign wstrb_channel_normal = 16'b0;
+    assign wvalid_channel_normal              = 1'b0;
+    assign wlast_channel_normal               = 1'b0;
+    assign wdata_channel_normal               = 32'b0;
+    assign wstrb_channel_normal               = 16'b0;
 
-    assign bready_channel_normal = 1'b0;
+    assign bready_channel_normal              = 1'b0;
 
-    assign arvalid_channel_normal = 1'b0;
-    assign araddr_channel_normal = 32'b0;
-    assign arlen_channel_normal = 8'b0;
-    assign arcache_channel_normal = 4'b0;
-    assign arsize_channel_normal = 2;  // Left default at 32-bit
+    assign arvalid_channel_normal             = 1'b0;
+    assign araddr_channel_normal              = 32'b0;
+    assign arlen_channel_normal               = 8'b0;
+    assign arcache_channel_normal             = 4'b0;
+    assign arsize_channel_normal              = 2;  // Left default at 32-bit
 
-    assign rready_channel_normal = 1'b0;
+    assign rready_channel_normal              = 1'b0;
 
 
     // -- Replace channel
 
-    assign valid_storage_wen_channel_replace = process_state == `STATE_REPLACE_READIN_FINALIZE;
-    assign valid_storage_ren_channel_replace = process_state == `STATE_REPLACE_EXECUTE ? valid_storage_ren_channel_normal : 0;
-    assign valid_storage_din_channel_replace = valid_storage_dout | (4'b0001 << process_lru_selected_set); // Set corresponding valid bit to 1
-    assign valid_storage_addr_channel_replace = process_state == `STATE_REPLACE_EXECUTE ? valid_storage_addr_channel_normal :process_index;
+    assign valid_storage_wen_channel_replace  = process_state == `STATE_REPLACE_READIN_FINALIZE;
+    assign valid_storage_ren_channel_replace  = process_state == `STATE_REPLACE_EXECUTE ? valid_storage_ren_channel_normal : 0;
+    assign valid_storage_addr_channel_replace = process_state == `STATE_REPLACE_EXECUTE ? valid_storage_addr_channel_normal : process_index;
+
+    Replace_bit valid_storage_din_channel_replacer (
+        .i      (valid_storage_dout),
+        .bit    (process_lru_selected_set),
+        .replace(!fetch_error),
+        .o      (valid_storage_din_channel_replace)
+    );
 
     assign data_storage_wen_channel_replace = m_axi_rvalid && process_state == `STATE_REPLACE_READIN_RECEIVE_DATA || process_state == `STATE_REPLACE_EXECUTE && query_process_wreq;
     assign data_storage_ren_channel_replace = 
@@ -1099,15 +1100,13 @@ module Data_cache_w32_addr32 (
 
     assign data_storage_waddr_channel_replace = process_state ==
         `STATE_REPLACE_EXECUTE
-        ? {process_index, process_lru_selected_set, process_subline_index} :
-            {process_index, process_lru_selected_set, replace_counter};
+        ? {process_index, process_lru_selected_set, process_subline_index} : {process_index, process_lru_selected_set, replace_counter};
 
     assign data_storage_raddr_channel_replace = process_state ==
         `STATE_REPLACE_EXECUTE
         ? {process_index, process_lru_selected_set, process_subline_index} : process_state ==
         `STATE_REPLACE_WRITEBACK_SEND_ADDRESS
-        ? {process_index, process_lru_selected_set, 3'b0} :
-            {process_index, process_lru_selected_set, replace_counter_next};
+        ? {process_index, process_lru_selected_set, 3'b0} : {process_index, process_lru_selected_set, replace_counter_next};
 
     always @(*)
         if (process_state == `STATE_REPLACE_EXECUTE) begin
@@ -1156,7 +1155,7 @@ module Data_cache_w32_addr32 (
     assign wdata_channel_replace             = data_storage_rdata;
     assign wstrb_channel_replace             = 16'hFFFF;
 
-    assign bready_channel_replace            = 1'b1;
+    assign bready_channel_replace            = process_state == `STATE_REPLACE_WRITEBACK_RECEIVE_RESPONSE;
 
     assign arvalid_channel_replace           = process_state == `STATE_REPLACE_READIN_SEND_ADDRESS;
     assign araddr_channel_replace            = {process_tag, process_index, 7'b0};
@@ -1200,7 +1199,7 @@ module Data_cache_w32_addr32 (
             3: wstrb_channel_periph = {query_process_wmask, 12'b0};
         endcase
 
-    assign bready_channel_periph            = 1'b1;
+    assign bready_channel_periph            = process_state == `STATE_PERIPH_WRITE_RECEIVE_RESPONSE;
 
     assign arvalid_channel_periph           = process_state == `STATE_PERIPH_READ_SEND_ADDRESS;
     assign araddr_channel_periph            = query_process_addr;
@@ -1263,7 +1262,7 @@ module Data_cache_w32_addr32 (
     assign wdata_channel_flush = data_storage_rdata;
     assign wstrb_channel_flush = 16'hFFFF;
 
-    assign bready_channel_flush = 1'b1;
+    assign bready_channel_flush = process_state == `STATE_FLUSH_RECEIVE_RESPONSE;
 
     assign arvalid_channel_flush = 0;
     assign araddr_channel_flush = 0;
@@ -1279,7 +1278,14 @@ module Data_cache_w32_addr32 (
         process_state == `STATE_FLUSH_FINALIZE || 
         process_state == `STATE_PERIPH_READ_FINALIZE || 
         process_state == `STATE_PERIPH_WRITE_FINALIZE ||
-        process_state == `STATE_REPLACE_EXECUTE;
+        process_state == `STATE_REPLACE_EXECUTE || have_trap_i;
+
+    wire clear_fetch_error = !rst && !wb_flush && process_output_accept_ready && process_product_ready;
+
+    always @(posedge clk) begin
+        if (rst || clear_fetch_error) fetch_error <= 0;
+        else if (m_axi_rvalid && m_axi_rready && m_axi_rlast && m_axi_rresp != 2'b00 || m_axi_bvalid && m_axi_bready && m_axi_bresp != 2'b00) fetch_error <= 1;
+    end
 
     /* PROCESS-OUTPUT */
 
@@ -1291,11 +1297,13 @@ module Data_cache_w32_addr32 (
     reg [1:0] process_output_subline_index;
 
     reg process_output_source;
-    reg process_output_rreq;
+    reg process_output_resp;
+    reg process_output_fetch_error;
 
-    assign rresp = process_output_valid && process_output_rreq;
-    assign dout = process_output_source ? process_output_periph_buffer : process_output_cache_data;
-    assign flush_done = process_state == `STATE_FLUSH_FINALIZE;
+    assign resp          = process_output_valid && process_output_resp;
+    assign dout          = process_output_source ? process_output_periph_buffer : process_output_cache_data;
+    assign flush_done    = process_state == `STATE_FLUSH_FINALIZE;
+    assign fetch_error_o = process_output_fetch_error;
 
     always @(*)
         case (process_output_subline_index)
@@ -1306,23 +1314,18 @@ module Data_cache_w32_addr32 (
         endcase
 
     always @(posedge clk) begin
-        if (rst) begin
-
-            process_output_valid         <= 0;
-            process_output_rreq          <= 0;
-            process_output_source        <= 0;
-            process_output_periph_buffer <= 0;
-            process_output_subline_index <= 0;
-
+        if (rst || wb_flush) begin
+            process_output_valid <= 0;
         end else if (process_output_accept_ready) begin
             process_output_valid <= process_product_ready;
             if (process_product_ready) begin
 
-                process_output_rreq <= query_process_rreq;
-                process_output_source <= process_is_periph ? OUTPUT_SOURCE_PERIPH : OUTPUT_SOURCE_CACHE;
+                process_output_resp          <= query_process_normal_access;
+                process_output_source        <= process_is_periph ? OUTPUT_SOURCE_PERIPH : OUTPUT_SOURCE_CACHE;
                 process_output_periph_buffer <= periph_buffer;
                 process_output_subline_index <= query_process_addr[3:2];
 
+                process_output_fetch_error   <= fetch_error;
             end
         end
     end

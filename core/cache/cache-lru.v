@@ -101,3 +101,20 @@ module Lru_update (
         endcase
 
 endmodule
+
+module Replace_bit(
+    input wire [3:0] i,
+    input wire [1:0] bit,
+    input wire replace,
+    output reg [3:0] o
+);
+
+    always @(*) 
+        case (bit)
+            2'b00: o = {i[3:1], replace};
+            2'b01: o = {i[3:2], replace, i[0]};
+            2'b10: o = {i[3], replace, i[1:0]};
+            2'b11: o = {replace, i[2:0]};
+        endcase
+
+endmodule

@@ -1,0 +1,36 @@
+// Machine Information
+`define CSR_SECTION_MACHINE_INFO 8'hF1
+
+`define CSR_MVENDORID 12'hF11
+`define CSR_MARCHID 12'hF12
+`define CSR_MIMPID 12'hF13
+`define CSR_MHARTID 12'hF14
+`define CSR_MCONFIGPTR 12'hF15
+
+// Machine Trap Setup
+`define CSR_SECTION_MACHINE_TRAP_SETUP 8'h30
+
+`define CSR_MSTATUS 12'h300
+`define CSR_MISA 12'h301
+`define CSR_MIE 12'h304
+`define CSR_MTVEC 12'h305
+// `define CSR_MCOUNTEREN 12'h306
+`define CSR_MSTATUSH 12'h310 // HIGH
+`define CSR_MEDELEGH 12'h311 // HIGH
+
+// Machine Trap Handling
+`define CSR_SECTION_MACHINE_TRAP_HANDLING 8'h31
+
+`define CSR_MSCRATCH 12'h340
+`define CSR_MEPC 12'h341
+`define CSR_MCAUSE 12'h342
+`define CSR_MTVAL 12'h343
+`define CSR_MIP 12'h344
+
+// Machine Configuration
+`define CSR_SECTION_MACHINE_CONFIG 8'h32
+
+`define CSR_MENVCFG 12'h30A
+`define CSR_MENVCFGH 12'h31A // HIGH
+
+`define CSR_SECTION_MACHINE_RW_HIGH1 8'h31

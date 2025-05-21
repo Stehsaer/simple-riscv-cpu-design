@@ -49,7 +49,11 @@ module time_axi (
     output wire [31:0] rdata,
     output wire [1:0] rresp,
     output wire rvalid,
-    input wire rready
+    input wire rready,
+
+    // Interrupt
+    output wire timer_trigger,
+    output wire timer_overflow
 );
 
     // Timer registers
@@ -65,15 +69,10 @@ module time_axi (
     reg [31:0] axi_write_target;
     reg [3:0] axi_wmask_buffer;
 
-    wire [31:0] ext_wstb = {
-        {8{axi_wmask_buffer[3]}},
-        {8{axi_wmask_buffer[2]}},
-        {8{axi_wmask_buffer[1]}},
-        {8{axi_wmask_buffer[0]}}
-    };
+    wire [31:0] ext_wstb = {{8{axi_wmask_buffer[3]}}, {8{axi_wmask_buffer[2]}}, {8{axi_wmask_buffer[1]}}, {8{axi_wmask_buffer[0]}}};
     wire [31:0] write_result = (axi_write_target & ~ext_wstb) | (axi_data_buffer & ext_wstb);
 
-    wire timer_trigger = timer_reg == timer_cmp_reg;
+    assign timer_trigger = timer_reg == timer_cmp_reg;
 
     reg [2:0] state;
 
@@ -87,6 +86,9 @@ module time_axi (
     localparam ADDR_TIMERH = 1;
     localparam ADDR_TIMECMPL = 2;
     localparam ADDR_TIMECMPH = 3;
+
+    wire [63:0] timer_next;
+    assign {timer_overflow, timer_next} = timer_reg + 1;
 
     always @(posedge aclk) begin
         if (!aresetn) begin
@@ -103,7 +105,7 @@ module time_axi (
                     ADDR_TIMECMPL: timer_cmp_reg[31:0] <= write_result;
                     ADDR_TIMECMPH: timer_cmp_reg[63:32] <= write_result;
                 endcase
-            end else timer_reg <= timer_reg + 1;
+            end else timer_reg <= timer_next;
 
             case (state)
                 STATE_IDLE: begin

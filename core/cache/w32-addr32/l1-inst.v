@@ -1,5 +1,7 @@
-
-module Inst_cache_w32_addr32 (
+module Inst_cache_w32_addr32 #(
+    INT_SIG_WIDTH      = 1,
+    FETCH_ERROR_TRAPNO = 0
+) (
     input wire clk,
     input wire rst,
 
@@ -10,6 +12,8 @@ module Inst_cache_w32_addr32 (
     output wire cache_ready,
     input wire [31:0] pc_i,
     input wire [30:0] branch_target_i,  // Offset by 1 bit
+    input [INT_SIG_WIDTH-1 : 0] trapno_i,
+    input wire have_trap_i,
 
     // Output pipeline
     input wire output_ready,
@@ -17,15 +21,12 @@ module Inst_cache_w32_addr32 (
     output wire [31:0] pc_o,
     output wire [30:0] branch_target_o,
     output wire [31:0] inst_o,
+    output [INT_SIG_WIDTH-1 : 0] trapno_o,
+    output wire have_trap_o,
 
     // Input control signal
     input wire fence_i,  // zifencei support
     input wire flush_i,  // Pipeline flush request
-
-    // Output control signal
-    output wire address_misaligned,
-    output reg  fetch_error,
-    // input wire clear_fetch_error,
 
     /* External AXI Signals: Cache <=> External AXI Device */
 
@@ -114,8 +115,7 @@ module Inst_cache_w32_addr32 (
     always @(posedge clk) begin
         if (rst || fence_i) begin
 
-            for (valid_lutram_i = 0; valid_lutram_i < 32; valid_lutram_i = valid_lutram_i + 1)
-            valid_storage_lutram[valid_lutram_i] <= 4'h0;
+            for (valid_lutram_i = 0; valid_lutram_i < 32; valid_lutram_i = valid_lutram_i + 1) valid_storage_lutram[valid_lutram_i] <= 4'h0;
 
             valid_storage_dout <= 4'h0;
 
@@ -159,8 +159,7 @@ module Inst_cache_w32_addr32 (
     always @(posedge clk) begin
         if (rst) begin
 
-            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1)
-            tag_storage_lutram[tag_lutram_i] <= 100'b0;
+            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1) tag_storage_lutram[tag_lutram_i] <= 100'b0;
 
             tag_storage_dout <= 100'b0;
 
@@ -193,21 +192,25 @@ module Inst_cache_w32_addr32 (
 
     reg [31:0] query_process_addr;
     reg [30:0] query_process_branch_target;
+    reg [INT_SIG_WIDTH - 1 : 0] query_process_trapno;
+    reg query_process_have_trap;
 
     always @(posedge clk) begin
         if (rst) begin
             query_process_valid         <= 0;
             query_process_addr          <= 0;
             query_process_branch_target <= 0;
+            query_process_trapno        <= 0;
+            query_process_have_trap     <= 0;
         end else if (pipeline_flush) begin
-
             query_process_valid <= 0;
-
         end else if (query_process_accept_ready) begin
             query_process_valid <= input_query_valid;
             if (query_product_ready) begin
                 query_process_addr          <= input_query_addr;
                 query_process_branch_target <= input_query_branch_target;
+                query_process_trapno        <= trapno_i;
+                query_process_have_trap     <= have_trap_i;
             end
         end
     end
@@ -230,7 +233,7 @@ module Inst_cache_w32_addr32 (
 
     Lru_find_set lru_matrix_parser (
         .lru_matrix(process_queried_lru_matrix),
-        .set(process_lru_selected_set)
+        .set       (process_lru_selected_set)
     );
 
     wire process_hit_set0 = process_queried_tag_set0 == process_tag && process_queried_valid[0];
@@ -258,14 +261,14 @@ module Inst_cache_w32_addr32 (
 
     Lru_update process_cache_hit_lru_matrix_update (
         .original(process_queried_lru_matrix),
-        .set(process_hit_set),
-        .updated(process_cache_hit_updated_lru_matrix)
+        .set     (process_hit_set),
+        .updated (process_cache_hit_updated_lru_matrix)
     );
 
     Lru_update process_cache_not_hit_lru_matrix_update (
         .original(process_queried_lru_matrix),
-        .set(process_lru_selected_set),
-        .updated(process_cache_not_hit_updated_lru_matrix)
+        .set     (process_lru_selected_set),
+        .updated (process_cache_not_hit_updated_lru_matrix)
     );
 
     wire [15:0] process_updated_lru_matrix = process_cache_hit ? process_cache_hit_updated_lru_matrix : process_cache_not_hit_updated_lru_matrix;
@@ -275,6 +278,8 @@ module Inst_cache_w32_addr32 (
 
     reg [2:0] process_state;
     reg [2:0] process_readin_counter;
+    reg fetch_error;
+    wire clear_fetch_error;
 
     `define STATE_NORMAL 0
 
@@ -312,23 +317,26 @@ module Inst_cache_w32_addr32 (
 
     assign valid_storage_waddr = process_index;
     assign valid_storage_wen = process_state == `STATE_REPLACE_READIN_FINALIZE;
-    assign valid_storage_din = valid_storage_dout | (4'b0001 << process_final_set);
+
+    Replace_bit valid_storage_din_replacer (
+        .i      (valid_storage_dout),
+        .bit    (process_final_set),
+        .replace(!fetch_error),
+        .o      (valid_storage_din)
+    );
 
     /* AXI FIXED VALUE */
 
     assign m_axi_arcache = 4'b1111;
-    assign m_axi_arlen = 7;
+    assign m_axi_arlen   = 7;
     assign m_axi_arburst = 2'b01;
-    assign m_axi_arsize = 3'b100;
-    assign m_axi_arid = 0;
-    assign m_axi_arlock = 1'b0;
+    assign m_axi_arsize  = 3'b100;
+    assign m_axi_arid    = 0;
+    assign m_axi_arlock  = 1'b0;
 
     assign m_axi_arvalid = process_state == `STATE_REPLACE_READIN_SEND_ADDRESS;
-    assign m_axi_araddr = {process_tag, process_index, 7'd0};
-    assign m_axi_rready = process_state == `STATE_REPLACE_READIN_RECEIVE_DATA;
-
-    // When implementing fetch-error handling, remove this signal and use the one from the input
-    wire clear_fetch_error = 0;
+    assign m_axi_araddr  = {process_tag, process_index, 7'd0};
+    assign m_axi_rready  = process_state == `STATE_REPLACE_READIN_RECEIVE_DATA;
 
     always @(posedge clk) begin
         if (rst || clear_fetch_error) fetch_error <= 0;
@@ -344,19 +352,17 @@ module Inst_cache_w32_addr32 (
         end else
             case (process_state)
                 `STATE_NORMAL: begin
-                    if (query_process_valid && !process_cache_hit) begin
+                    if (query_process_valid && !process_cache_hit && !query_process_have_trap) begin
                         process_state          <= `STATE_REPLACE_READIN_SEND_ADDRESS;
                         process_readin_counter <= 0;
                     end
                 end
 
-                `STATE_REPLACE_READIN_SEND_ADDRESS:
-                if (m_axi_arready) process_state <= `STATE_REPLACE_READIN_RECEIVE_DATA;
+                `STATE_REPLACE_READIN_SEND_ADDRESS: if (m_axi_arready) process_state <= `STATE_REPLACE_READIN_RECEIVE_DATA;
 
                 `STATE_REPLACE_READIN_RECEIVE_DATA: begin
                     if (m_axi_rvalid) begin
-                        if (process_readin_counter == 7)
-                            process_state <= `STATE_REPLACE_READIN_FINALIZE;
+                        if (process_readin_counter == 7) process_state <= `STATE_REPLACE_READIN_FINALIZE;
                         else process_readin_counter <= process_readin_counter + 1;
                     end
                 end
@@ -368,18 +374,22 @@ module Inst_cache_w32_addr32 (
                 default: process_state <= `STATE_NORMAL;
             endcase
 
-    assign process_ready_go = process_state == `STATE_NORMAL && process_cache_hit || process_state == `STATE_REPLACE_EXECUTE;
-    assign process_working = process_state != `STATE_NORMAL && process_state != `STATE_REPLACE_EXECUTE;
+    assign process_ready_go = process_state == `STATE_NORMAL && (process_cache_hit || query_process_have_trap) || process_state == `STATE_REPLACE_EXECUTE;
+    assign process_working  = process_state != `STATE_NORMAL && process_state != `STATE_REPLACE_EXECUTE;
 
     /* PROCESS-OUTPUT */
 
     reg [30:0] process_output_branch_target;
     reg [31:0] process_output_addr;
     reg [31:0] process_output_inst;
+    reg [INT_SIG_WIDTH-1:0] process_output_trapno;
+    reg process_output_have_trap;
 
     assign pc_o            = process_output_addr;
     assign branch_target_o = process_output_branch_target;
     assign inst_o          = process_output_inst;
+    assign trapno_o        = process_output_trapno;
+    assign have_trap_o     = process_output_have_trap;
 
     // Convert fetch group to inst, if superscalar, output the entire fetch group
     always @(*)
@@ -395,13 +405,20 @@ module Inst_cache_w32_addr32 (
             process_output_valid         <= 0;
             process_output_addr          <= 0;
             process_output_branch_target <= 0;
-        end else if (pipeline_flush) process_output_valid <= 0;
-        else if (process_output_accept_ready) begin
+            process_output_trapno        <= 0;
+            process_output_have_trap     <= 0;
+        end else if (flush_i) begin
+            process_output_valid <= 0;
+        end else if (process_output_accept_ready) begin
             process_output_valid <= process_product_ready;
             if (process_product_ready) begin
                 process_output_addr          <= query_process_addr;
                 process_output_branch_target <= query_process_branch_target;
+                process_output_trapno        <= fetch_error ? FETCH_ERROR_TRAPNO : query_process_trapno;
+                process_output_have_trap     <= fetch_error ? 1 : query_process_have_trap;
             end
         end
+
+    assign clear_fetch_error = !rst && !flush_i && process_output_accept_ready && process_product_ready && fetch_error;
 
 endmodule

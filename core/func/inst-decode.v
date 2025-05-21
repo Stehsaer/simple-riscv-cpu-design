@@ -1,31 +1,38 @@
 `include "inst-const.vh"
+`include "decode-signals.vh"
 
 module inst_decode_v2_stage1 (
     input wire [31:0] inst_i,  // Instruction Input
     input wire [31:0] pc_i,    // PC Input
 
-    output reg [3:0] alu_op_o,  // ALU Opcode
-    output reg [1:0] alu_section_o,  // ALU Section
-    output reg [3:0] alu_num1_sel_o,  // ALU Operand 1 Select
-    output reg [3:0] alu_num2_sel_o,  // ALU Operand 2 Select
+    output reg `ALU_OP_SIGWIDTH alu_op_o,  // ALU Opcode
+    output reg `ALU_SECTION_SIGWIDTH alu_section_o,  // ALU Section
+    output reg `ALU_NUM_SEL_SIGWIDTH alu_num1_sel_o,  // ALU Operand 1 Select
+    output reg `ALU_NUM_SEL_SIGWIDTH alu_num2_sel_o,  // ALU Operand 2 Select
 
-    output reg [1:0] wb_sel_o,  // Writeback Source Select
+    output reg `WB_SRC_SIGWIDTH wb_sel_o,  // Writeback Source Select
     output reg [4:0] wb_reg_o,  // Writeback Register
     output wire [31:1] wb_reg_onehot_o,  // Writeback Register Onehot, for bypass
 
     output reg rs1_req_o,  // Read Register 1 Request, HIGH if needed
     output reg rs2_req_o,  // Read Register 2 Request, HIGH if needed
 
-    output reg        pc_sel_o,      // PC Write Select
-    output reg  [1:0] cmp_op_o,      // Branch Unit Compare Opcode
-    output reg  [2:0] cmp_funct_o,
-    output reg  [1:0] mem_op_o,      // Memory Unit Opcode
-    output reg  [2:0] mem_funct_o,
-    output reg        bp_enabled_o,  // Branch Prediction Enabled
-    output wire       fencei_o       // Fence.i instruction
-);
-    `include "decode-signals.vh"
+    output reg pc_sel_o,  // PC Write Select
 
+    output reg `CMP_OP_SIGWIDTH cmp_op_o,    // Branch Unit Compare Opcode
+    output reg `CMP_FUNCT_SIGWIDTH cmp_funct_o,
+
+    output reg `MEM_OP_SIGWIDTH mem_op_o,    // Memory Unit Opcode
+    output reg `MEM_FUNCT_SIGWIDTH mem_funct_o,
+
+    output reg  bp_enabled_o,  // Branch Prediction Enabled
+    output wire fencei_o,      // Fence.i instruction
+
+    output reg `CSR_WRITE_SIGWIDTH csr_write_mode_o,
+    output reg csr_do_read_o,
+
+    output reg `SYS_SIGWIDTH sys_op_o
+);
     /* INSTR CONSTANT */
 
     assign wb_reg_onehot_o = 1 << wb_reg_o;
@@ -36,6 +43,9 @@ module inst_decode_v2_stage1 (
     wire [2:0] funct3 = inst_i[14:12];
     wire [6:0] funct7 = inst_i[31:25];
     wire [4:0] rd = inst_i[11:7];
+    wire [4:0] rs1 = inst_i[19:15];
+    wire [4:0] rs2 = inst_i[24:20];
+    wire [12:0] imm = inst_i[31:20];
 
     always @(*) begin
         case (opcode)
@@ -62,6 +72,26 @@ module inst_decode_v2_stage1 (
             `OP_STORE: begin
                 rs1_req_o = 1;
                 rs2_req_o = 1;
+            end
+            `OP_SYSTEM: begin
+                case (funct3)
+                    `FUNCT3_ECALL_EBREAK: begin
+                        rs1_req_o = 0;
+                        rs2_req_o = 0;
+                    end
+                    `FUNCT3_CSRRW, `FUNCT3_CSRRS, `FUNCT3_CSRRC: begin
+                        rs1_req_o = 1;
+                        rs2_req_o = 0;
+                    end
+                    `FUNCT3_CSRRWI, `FUNCT3_CSRRSI, `FUNCT3_CSRRCI: begin
+                        rs1_req_o = 0;
+                        rs2_req_o = 0;
+                    end
+                    default: begin
+                        rs1_req_o = 0;
+                        rs2_req_o = 0;
+                    end
+                endcase
             end
 
             // LUI, AUIPC, JAL, SYNC
@@ -151,6 +181,26 @@ module inst_decode_v2_stage1 (
                 alu_num1_sel_o = `ALU_NUM_SEL_REG;
                 alu_num2_sel_o = `ALU_NUM_SEL_S;
             end
+            `OP_SYSTEM: begin
+                case (funct3)
+                    `FUNCT3_ECALL_EBREAK: begin
+                        alu_num1_sel_o = `ALU_NUM_SEL_Z;
+                        alu_num2_sel_o = `ALU_NUM_SEL_Z;
+                    end
+                    `FUNCT3_CSRRW, `FUNCT3_CSRRS, `FUNCT3_CSRRC: begin
+                        alu_num1_sel_o = `ALU_NUM_SEL_REG;
+                        alu_num2_sel_o = `ALU_NUM_SEL_Z;
+                    end
+                    `FUNCT3_CSRRWI, `FUNCT3_CSRRSI, `FUNCT3_CSRRCI: begin
+                        alu_num1_sel_o = `ALU_NUM_SEL_CSR_UIMM;
+                        alu_num2_sel_o = `ALU_NUM_SEL_Z;
+                    end
+                    default: begin
+                        alu_num1_sel_o = `ALU_NUM_SEL_Z;
+                        alu_num2_sel_o = `ALU_NUM_SEL_Z;
+                    end
+                endcase
+            end
             default: begin
                 alu_num1_sel_o = `ALU_NUM_SEL_Z;
                 alu_num2_sel_o = `ALU_NUM_SEL_Z;
@@ -169,6 +219,14 @@ module inst_decode_v2_stage1 (
             `OP_BRANCH, `OP_STORE: wb_sel_o = `WB_NONE;
             // Memory Load as writeback result
             `OP_LOAD: wb_sel_o = `WB_MEM;
+            // System
+            `OP_SYSTEM:
+            case (funct3)
+                // CSR uses CSR result as writeback result
+                `FUNCT3_CSRRW, `FUNCT3_CSRRS, `FUNCT3_CSRRC, `FUNCT3_CSRRWI, `FUNCT3_CSRRSI, `FUNCT3_CSRRCI:
+                wb_sel_o = `WB_CSR;
+                default: wb_sel_o = `WB_NONE;
+            endcase
             default: wb_sel_o = `WB_NONE;
         endcase
     end
@@ -226,6 +284,58 @@ module inst_decode_v2_stage1 (
 
     assign fencei_o = opcode == `OP_MISC_MEM && funct3 == `FUNCT3_ZICOND;  // Zifencei
 
+    // CSR Write Mode
+    always @(*) begin
+        case (opcode)
+            `OP_SYSTEM: begin
+                case (funct3)
+                    `FUNCT3_CSRRW, `FUNCT3_CSRRWI: csr_write_mode_o = `CSR_WRITE_OVERWRITE;
+                    `FUNCT3_CSRRC, `FUNCT3_CSRRCI:
+                    csr_write_mode_o = rs1 != 0 ? `CSR_WRITE_CLEARBITS : `CSR_WRITE_NONE;
+                    `FUNCT3_CSRRS, `FUNCT3_CSRRSI:
+                    csr_write_mode_o = rs1 != 0 ? `CSR_WRITE_SETBITS : `CSR_WRITE_NONE;
+                    default: csr_write_mode_o = `CSR_WRITE_NONE;
+                endcase
+            end
+            default: csr_write_mode_o = `CSR_WRITE_NONE;
+        endcase
+    end
+
+    // CSR Read
+    always @(*) begin
+        case (opcode)
+            `OP_SYSTEM: begin
+                case (funct3)
+                    `FUNCT3_CSRRW, `FUNCT3_CSRRWI: csr_do_read_o = rd != 0;
+                    `FUNCT3_CSRRC, `FUNCT3_CSRRCI,
+                    `FUNCT3_CSRRS, `FUNCT3_CSRRSI:
+                        csr_do_read_o = 1;
+                    default: csr_do_read_o = 0;
+                endcase
+            end
+            default: csr_do_read_o = 0;
+        endcase
+    end
+
+    always @(*) begin
+        case(opcode)
+            `OP_SYSTEM: begin
+                case (funct3)
+                    `FUNCT3_ECALL_EBREAK: 
+                    begin
+                        case (imm)
+                            12'b000000000000: sys_op_o = `SYS_ECALL;
+                            12'b000000000001: sys_op_o = `SYS_EBREAK;
+                            12'b001100000010: sys_op_o = `SYS_MRET;
+                        endcase
+                    end
+                    default: sys_op_o = 0;
+                endcase
+            end
+            default: sys_op_o = 0;
+        endcase
+    end
+
 endmodule
 
 module inst_decode_v2_stage2 (
@@ -242,8 +352,8 @@ module inst_decode_v2_stage2 (
     input wire rs1_req_i,
     input wire rs2_req_i,
 
-    input wire [3:0] alu_num1_sel_i,  // ALU Operand 1 Select
-    input wire [3:0] alu_num2_sel_i,  // ALU Operand 2 Select
+    input wire `ALU_NUM_SEL_SIGWIDTH alu_num1_sel_i,  // ALU Operand 1 Select
+    input wire `ALU_NUM_SEL_SIGWIDTH alu_num2_sel_i,  // ALU Operand 2 Select
 
     /* Data Hazard Detection */
 
@@ -269,6 +379,8 @@ module inst_decode_v2_stage2 (
 
     output wire [31:0] mem_wdata_o,
 
+    output wire [11:0] csr_addr_o,
+
     output wire stall_o
 );
     wire [ 4:0] rs1 = inst_i[19:15];
@@ -290,6 +402,8 @@ module inst_decode_v2_stage2 (
 
     wire [20:0] imm_j = {inst_i[31], inst_i[19:12], inst_i[20], inst_i[30:21], 1'b0};
     wire [31:0] imm_j_sext = {{11{imm_j[20]}}, imm_j};
+
+    wire [31:0] csr_uimm = {27'b0, rs1};
 
     // Data Hazard Detection
 
@@ -333,13 +447,13 @@ module inst_decode_v2_stage2 (
     rs1_raw_bits_onehot[1] & !ex_modify_data_valid_i |
     rs1_raw_bits_onehot[2] & !mem1_modify_data_valid_i |
     rs1_raw_bits_onehot[3] & !mem2_modify_data_valid_i |
-    rs1_raw_bits_onehot[4] & (|(wb_reg_onfly_i & rs1_onehot)); // TODO: Remove redundant logic
+    rs1_raw_bits_onehot[4] & (|(wb_reg_onfly_i & rs1_onehot));
 
     wire rs2_raw = 
     rs2_raw_bits_onehot[1] & !ex_modify_data_valid_i |
     rs2_raw_bits_onehot[2] & !mem1_modify_data_valid_i |
     rs2_raw_bits_onehot[3] & !mem2_modify_data_valid_i |
-    rs2_raw_bits_onehot[4] & (|(wb_reg_onfly_i & rs2_onehot)); // TODO: Remove redundant logic
+    rs2_raw_bits_onehot[4] & (|(wb_reg_onfly_i & rs2_onehot));
 
     assign stall_o     = rs1_raw && rs1_req_i || rs2_raw && rs2_req_i;
 
@@ -359,6 +473,7 @@ module inst_decode_v2_stage2 (
             `ALU_NUM_SEL_J: alu_num1_o = imm_j_sext;
             `ALU_NUM_SEL_S: alu_num1_o = imm_s_sext;
             `ALU_NUM_SEL_B: alu_num1_o = imm_b_sext;
+            `ALU_NUM_SEL_CSR_UIMM: alu_num1_o = csr_uimm;
             default: alu_num1_o = 32'd0;
         endcase
 
@@ -374,6 +489,8 @@ module inst_decode_v2_stage2 (
             `ALU_NUM_SEL_B: alu_num2_o = imm_b_sext;
             default: alu_num2_o = 32'd0;
         endcase
+
+    assign csr_addr_o = inst_i[31:20];
 
 endmodule
 

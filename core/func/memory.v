@@ -4,15 +4,17 @@
 
 // Stage 1: Generate write data
 module memory_stage1 (
-    input wire [ 1:0] mem_op_i,
-    input wire [ 2:0] mem_funct_i,
+    input wire `MEM_OP_SIGWIDTH mem_op_i,
+    input wire `MEM_FUNCT_SIGWIDTH mem_funct_i,
+
     input wire [31:0] mem_addr_i,
     input wire [31:0] mem_wdata_i,
 
     output wire [29:0] ram_addr_o,
     output reg [31:0] ram_wdata_o,
     output reg [3:0] ram_wen_o,
-    output reg ram_ren_o
+    output reg ram_ren_o,
+    output reg ram_misaligned_o
 );
 
     assign ram_addr_o = mem_addr_i >> 2;
@@ -58,6 +60,19 @@ module memory_stage1 (
                 ram_ren_o   = 0;
                 ram_wdata_o = 0;
             end
+        endcase
+    end
+
+    always @(*) begin
+        case (mem_op_i)
+            `MEM_OP_NONE: ram_misaligned_o = 0;
+            default:
+            case (mem_funct_i)
+                `MEM_FUNCT_NONE: ram_misaligned_o = 0;
+                `MEM_FUNCT_LB, `MEM_FUNCT_LBU, `MEM_FUNCT_SB: ram_misaligned_o = 0;
+                `MEM_FUNCT_LH, `MEM_FUNCT_LHU, `MEM_FUNCT_SH: ram_misaligned_o = mem_addr_i[0] != 0;
+                `MEM_FUNCT_LW, `MEM_FUNCT_SW: ram_misaligned_o = mem_addr_i[1:0] != 2'b00;
+            endcase
         endcase
     end
 

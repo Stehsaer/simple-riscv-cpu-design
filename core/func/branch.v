@@ -1,8 +1,9 @@
 `include "decode-signals.vh"
 
 module branch (
-    input  wire [ 1:0] cmp_op_i,
-    input  wire [ 2:0] cmp_funct_i,
+    input wire `CMP_OP_SIGWIDTH    cmp_op_i,
+    input wire `CMP_FUNCT_SIGWIDTH cmp_funct_i,
+
     input  wire [31:0] cmp_num1_i,
     input  wire [31:0] cmp_num2_i,
     output wire        do_branch_o
