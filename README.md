@@ -25,7 +25,7 @@ Located under folder `./peripheral`
 
 ## CPU Features
 
-- **Instruction Set**: `rv32im_zicond_zifencei`, only supports M-mode
+- **Instruction Set**: `rv32im_zicond_zicsr_zifencei`, only supports M-mode
 - **Execution**: In-order execution, pipelined
 - **Pipeline**: 8-stage pipeline
   - PC
@@ -87,6 +87,11 @@ Doable with in a short period of time, with designs that are ready and can be im
 
 - Control signals cleanup and clarification
 
+#### Architecture-level
+
+- `F` extension
+- `Zicbom` extension
+
 ### Long-term
 
 Not doable in short-term:
@@ -98,12 +103,9 @@ Not doable in short-term:
 
 #### Architecture-level
 
-- `Zicsr` extension along with extendable and modular CSR design (specification not yet finished reading, need to make a designing sheet for CSRs)
-- Interrupt/Exception (`Zicsr` required)
-- `F` extension (`Zicsr` required)
 - `C` extension (CPU architecture not yet suitable, needs some cleanup and refactoring to the architecture; would cause absolute mess if implement it now)
 - DMA (coherency issue)
-- Priviledged architecture (`Zicsr` required, lacking OS knowledge)
+- Priviledged architecture (lacking OS knowledge)
 
 #### Peripheral
 
