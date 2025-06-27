@@ -87,13 +87,13 @@ module alu_muldiv (
     wire div_tx_valid;
 
     base4_divider div_module (
-        .clk(clk),
-        .rst(rst),
-        .dividend(div_dividend),
-        .divisor(div_divisor),
-        .input_valid(div_tx_valid),
-        .quotient(div_quotient),
-        .remainder(div_remainder),
+        .clk         (clk),
+        .rst         (rst),
+        .dividend    (div_dividend),
+        .divisor     (div_divisor),
+        .input_valid (div_tx_valid),
+        .quotient    (div_quotient),
+        .remainder   (div_remainder),
         .output_valid(div_done)
     );
 
@@ -113,8 +113,7 @@ module alu_muldiv (
     wire divide_by_zero = num2 == 0;
 
     // Effective values that are passed to computation modules
-    wire [31:0] abs_num1 = num1_sign && num1_signed ? -num1 : num1,
-                abs_num2 = num2_sign && num2_signed ? -num2 : num2;
+    wire [31:0] abs_num1 = num1_sign && num1_signed ? -num1 : num1, abs_num2 = num2_sign && num2_signed ? -num2 : num2;
 
     assign mul_num1     = abs_num1;
     assign mul_num2     = abs_num2;
@@ -154,13 +153,11 @@ module alu_muldiv (
         if (rst) state <= `STATE_IDLE;
         else
             case (state)
-                `STATE_IDLE:
-                if (input_valid) state <= op_is_division ? `STATE_DIV_WAIT : `STATE_MUL_CLK1;
+                `STATE_IDLE: if (input_valid) state <= op_is_division ? `STATE_DIV_WAIT : `STATE_MUL_CLK1;
 
                 `STATE_MUL_CLK1:   state <= `STATE_MUL_CLK2;
                 `STATE_MUL_CLK2:   state <= `STATE_MUL_CLK3;
-                `STATE_MUL_CLK3:   state <= `STATE_MUL_CLK4;
-                `STATE_MUL_CLK4:   state <= `STATE_MUL_FINISH;
+                `STATE_MUL_CLK3:   state <= `STATE_MUL_FINISH;
                 `STATE_MUL_FINISH: state <= `STATE_IDLE;
 
                 `STATE_DIV_WAIT: if (div_done) state <= `STATE_IDLE;
@@ -258,28 +255,28 @@ module alu (
     wire muldiv_busy;
 
     alu_integer integer_module (
-        .op(alu_op_i),
-        .num1(alu_num1_i),
-        .num2(alu_num2_i),
+        .op    (alu_op_i),
+        .num1  (alu_num1_i),
+        .num2  (alu_num2_i),
         .result(integer_result),
-        .add(alu_add_result_o)
+        .add   (alu_add_result_o)
     );
 
     alu_muldiv muldiv_module (
-        .clk(clk_i),
-        .rst(rst_i),
-        .op(alu_op_i[2:0]),
+        .clk        (clk_i),
+        .rst        (rst_i),
+        .op         (alu_op_i[2:0]),
         .input_valid(alu_valid_i && alu_section_i == `ALU_SECTION_MULDIV),
-        .num1(alu_num1_i),
-        .num2(alu_num2_i),
-        .result(muldiv_result),
-        .busy(muldiv_busy)
+        .num1       (alu_num1_i),
+        .num2       (alu_num2_i),
+        .result     (muldiv_result),
+        .busy       (muldiv_busy)
     );
 
     alu_zicond zicond_module (
-        .num1(alu_num1_i),
-        .num2(alu_num2_i),
-        .op(alu_op_i[2:0]),
+        .num1  (alu_num1_i),
+        .num2  (alu_num2_i),
+        .op    (alu_op_i[2:0]),
         .result(zicond_result)
     );
 
