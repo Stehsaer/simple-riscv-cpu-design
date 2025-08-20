@@ -1028,12 +1028,12 @@ module Data_cache_w32_addr32 (
     assign valid_storage_wen_channel_normal = 0;  // Dont need to writein valid when hit
     assign valid_storage_din_channel_normal = 0;
 
-    assign tag_storage_wen_channel_normal = process_cache_hit_not_periph && query_process_wreq && !have_trap_i;  // Writein tag when hit and write requested (modify dirty bit)
+    assign tag_storage_wen_channel_normal = process_cache_hit_not_periph && (query_process_wreq || query_process_rreq) && !have_trap_i;  // Writein tag when hit and write requested (modify dirty bit)
     assign tag_storage_waddr_channel_normal = process_index;
     assign tag_storage_wdata_channel_normal = {
         process_next_lru_selected_set,
         process_cache_hit_updated_lru_matrix,
-        process_queried_dirty | ({3'b000, query_process_wreq} << process_hit_set),
+        process_queried_dirty | ({3'b000, query_process_wreq} << process_hit_set) & {4{query_process_wreq}},
         process_queried_tag_set3,
         process_queried_tag_set2,
         process_queried_tag_set1,
