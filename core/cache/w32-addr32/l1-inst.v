@@ -145,21 +145,19 @@ module Inst_cache_w32_addr32 #(
         .doutb(data_storage_rdata)   // output wire [127 : 0] doutb
     );
 
-    // -- Tag BRAM
+    // -- Tag RAM
 
     wire [4:0] tag_storage_waddr, tag_storage_raddr;
     wire [99:0] tag_storage_wdata;
     wire [99:0] tag_storage_rdata;
     wire tag_storage_wen, tag_storage_ren;
 
-    reg [99:0] tag_storage_lutram[0:31];
+    (* ram_style="distributed" *) reg [99:0] tag_storage_lutram[0:31];
     reg [99:0] tag_storage_dout;
 
     integer tag_lutram_i;
     always @(posedge clk) begin
         if (rst) begin
-
-            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1) tag_storage_lutram[tag_lutram_i] <= 100'b0;
 
             tag_storage_dout <= 100'b0;
 

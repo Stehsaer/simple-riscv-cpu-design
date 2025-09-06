@@ -10,6 +10,7 @@ module cpu_core (
     input wire external_interrupt_i,
 
     /* L1i Cache */
+    (* X_INTERFACE_PARAMETER = "MAX_BURST_LENGTH 8, SUPPORTS_NARROW_BURST 0, NUM_WRITE_OUTSTANDING 0, NUM_READ_OUTSTANDING 0" *)
 
     output wire icache_arvalid,
     input wire icache_arready,
@@ -29,6 +30,7 @@ module cpu_core (
     input wire [1:0] icache_rresp,
 
     /* L1d Cache */
+    (* X_INTERFACE_PARAMETER = "MAX_BURST_LENGTH 8, SUPPORTS_NARROW_BURST 1, NUM_WRITE_OUTSTANDING 0, NUM_READ_OUTSTANDING 0" *)
 
     output wire data_awvalid,
     input wire data_awready,

@@ -9,12 +9,11 @@ module Data_cache_w32_addr32 (
     input wire wen,
     input wire [31:0] din,
     input wire [3:0] wmask,
-
+    input wire have_trap_i,
     input wire ren,
-    output wire [31:0] dout,
 
+    output wire [31:0] dout,
     output wire resp,
-    input  wire have_trap_i,
     output wire fetch_error_o,
     output wire busy,
 
@@ -199,21 +198,19 @@ module Data_cache_w32_addr32 (
         .doutb(data_storage_rdata)   // output wire [127 : 0] doutb
     );
 
-    // -- Tag BRAM
+    // -- Tag RAM
 
     reg [4:0] tag_storage_waddr, tag_storage_raddr;
     reg  [101:0] tag_storage_wdata;
     wire [101:0] tag_storage_rdata;
     reg tag_storage_wen, tag_storage_ren;
 
-    reg [101:0] tag_storage_lutram[0:31];
+    (* ram_style="distributed" *) reg [101:0] tag_storage_lutram[0:31];
     reg [101:0] tag_storage_dout;
 
     integer tag_lutram_i;
     always @(posedge clk) begin
         if (rst) begin
-
-            for (tag_lutram_i = 0; tag_lutram_i < 32; tag_lutram_i = tag_lutram_i + 1) tag_storage_lutram[tag_lutram_i] <= 102'b0;
 
             tag_storage_dout <= 102'b0;
 

@@ -63,7 +63,7 @@ module alu_muldiv (
     `define STATE_MUL_CLK1 1
     `define STATE_MUL_CLK2 2
     `define STATE_MUL_CLK3 3
-    `define STATE_MUL_CLK4 4
+    `define STATE_MUL_CALC_RESULT 4
     `define STATE_MUL_FINISH 5
     `define STATE_DIV_WAIT 6
 
@@ -145,19 +145,26 @@ module alu_muldiv (
     // ===== STATE MACHINE =====
 
     reg [2:0] state;
+    reg [63:0] mul_result_signed;
 
     wire op_is_division = op[2] == 1;
     assign div_tx_valid = input_valid && state != `STATE_DIV_WAIT && op_is_division;
 
     always @(posedge clk)
-        if (rst) state <= `STATE_IDLE;
-        else
+        if (rst) begin
+            state             <= `STATE_IDLE;
+            mul_result_signed <= 0;
+        end else
             case (state)
                 `STATE_IDLE: if (input_valid) state <= op_is_division ? `STATE_DIV_WAIT : `STATE_MUL_CLK1;
 
                 `STATE_MUL_CLK1:   state <= `STATE_MUL_CLK2;
                 `STATE_MUL_CLK2:   state <= `STATE_MUL_CLK3;
-                `STATE_MUL_CLK3:   state <= `STATE_MUL_FINISH;
+                `STATE_MUL_CLK3:   state <= `STATE_MUL_CALC_RESULT;
+                `STATE_MUL_CALC_RESULT: begin
+                    mul_result_signed <= result_sign_flip ? -mul_result : mul_result;
+                    state             <= `STATE_MUL_FINISH;
+                end
                 `STATE_MUL_FINISH: state <= `STATE_IDLE;
 
                 `STATE_DIV_WAIT: if (div_done) state <= `STATE_IDLE;
@@ -168,7 +175,7 @@ module alu_muldiv (
     always @(*)
         case (state)
             `STATE_IDLE: busy = input_valid;
-            `STATE_MUL_CLK1, `STATE_MUL_CLK2, `STATE_MUL_CLK3, `STATE_MUL_CLK4: busy = 1;
+            `STATE_MUL_CLK1, `STATE_MUL_CLK2, `STATE_MUL_CLK3, `STATE_MUL_CALC_RESULT: busy = 1;
             `STATE_MUL_FINISH: busy = 0;
             `STATE_DIV_WAIT: busy = !div_done;
             default: busy = 0;
@@ -196,7 +203,7 @@ module alu_muldiv (
             end
         endcase
 
-    wire [63:0] mul_result_signed = result_sign_flip ? -mul_result : mul_result;
+    // wire [63:0] mul_result_signed = result_sign_flip ? -mul_result : mul_result;
 
     always @(*)
         case (op)
