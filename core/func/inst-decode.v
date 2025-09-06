@@ -410,8 +410,7 @@ module inst_decode_v2_stage2 (
     assign reg_raddr1 = rs1;
     assign reg_raddr2 = rs2;
 
-    wire [31:1] rs1_onehot = 1 << rs1;
-    wire [31:1] rs2_onehot = 1 << rs2;
+    wire[31:0] wb_reg_onfly_full = {wb_reg_onfly_i, 1'b0};
 
     // One Hot Mask
     // [0] = None
@@ -447,13 +446,13 @@ module inst_decode_v2_stage2 (
     rs1_raw_bits_onehot[1] & !ex_modify_data_valid_i |
     rs1_raw_bits_onehot[2] & !mem1_modify_data_valid_i |
     rs1_raw_bits_onehot[3] & !mem2_modify_data_valid_i |
-    rs1_raw_bits_onehot[4] & (|(wb_reg_onfly_i & rs1_onehot));
+    rs1_raw_bits_onehot[4] & wb_reg_onfly_full[rs1];
 
     wire rs2_raw = 
     rs2_raw_bits_onehot[1] & !ex_modify_data_valid_i |
     rs2_raw_bits_onehot[2] & !mem1_modify_data_valid_i |
     rs2_raw_bits_onehot[3] & !mem2_modify_data_valid_i |
-    rs2_raw_bits_onehot[4] & (|(wb_reg_onfly_i & rs2_onehot));
+    rs2_raw_bits_onehot[4] & wb_reg_onfly_full[rs2];
 
     assign stall_o     = rs1_raw && rs1_req_i || rs2_raw && rs2_req_i;
 
